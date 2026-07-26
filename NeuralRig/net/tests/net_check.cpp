@@ -86,6 +86,41 @@ int main()
     Check(url.find("t3k_cs_") == std::string::npos, "does NOT leak a secret key");
   }
 
+  printf("Credential store\n");
+  {
+    // Round-trip through the real OS store. A silently broken path here would
+    // sign the user out every session, which reads as "it forgot me" rather
+    // than as a bug.
+    const std::string key = "net_check_scratch";
+    const std::string secret = "refresh-token-\xE2\x9C\x93-with-unicode";
+
+    Check(SecretStore(key, secret), "store a secret");
+
+    std::string loaded;
+    Check(SecretLoad(key, loaded), "load it back");
+    Check(loaded == secret, "value survives the round trip");
+
+    Check(SecretErase(key), "erase it");
+
+    std::string afterErase;
+    Check(!SecretLoad(key, afterErase), "gone after erase");
+  }
+
+  printf("Restored session semantics\n");
+  {
+    // A session restored from the credential store has a refresh token but no
+    // access token. It must still count as signed in, and must look expired so
+    // the first request exchanges the refresh token.
+    Tokens restored;
+    restored.refreshToken = "some-refresh-token";
+
+    Check(!restored.IsEmpty(), "refresh token alone counts as signed in");
+    Check(restored.IsExpired(), "missing access token counts as expired");
+
+    Tokens empty;
+    Check(empty.IsEmpty(), "genuinely empty tokens are empty");
+  }
+
   printf("HTTPS transport (live)\n");
   {
     // Unauthenticated, so a 401 is the expected answer. What matters is that we

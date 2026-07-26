@@ -84,13 +84,21 @@ struct SearchQuery
   int pageSize = 24;
 };
 
+/// Key under which the refresh token is filed in the OS credential store.
+inline constexpr const char* kRefreshTokenKey = "tone3000_refresh_token";
+
 struct Tokens
 {
   std::string accessToken;
   std::string refreshToken;
   int64_t expiresAtMs = 0;
 
-  bool IsEmpty() const { return accessToken.empty(); }
+  /// A restored session has a refresh token but no access token yet, and is
+  /// still "signed in" -- the access token is re-derived on first use.
+  bool IsEmpty() const { return accessToken.empty() && refreshToken.empty(); }
+
+  /// True when the access token is missing or close enough to expiry that a
+  /// request might outlive it.
   bool IsExpired() const;
 };
 
@@ -132,6 +140,13 @@ public:
   Tokens GetTokens() const;
   void SetTokens(Tokens tokens);
   void ClearTokens();
+
+  /// Reads any previously saved session from the OS credential store. Call once
+  /// at startup; returns false if there was nothing saved.
+  bool LoadSavedSession();
+
+  /// Forgets the saved session and signs out.
+  void SignOut();
 
   // --- Resources ------------------------------------------------------------
 

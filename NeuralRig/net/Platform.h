@@ -67,4 +67,22 @@ HttpResponse HttpRequest(const std::string& method,
 /// the plugin never handles the user's password.
 bool OpenUrlInBrowser(const std::string& url);
 
+/**
+    Credentials at rest, in the OS store rather than a file we own.
+
+        Windows   Credential Manager (wincred)
+        macOS     Keychain Services
+
+    A refresh token is a long-lived credential: whoever reads it can act as the
+    user against the API until it is revoked. Writing it to a plain file in the
+    plugin's settings directory would leave it readable by any process running
+    as that user, and would sweep it into filesystem backups and sync folders.
+    The OS stores encrypt at rest and scope to the user account.
+
+    @param key  identifies the secret within NeuralRig's namespace
+*/
+bool SecretStore(const std::string& key, const std::string& value);
+bool SecretLoad(const std::string& key, std::string& value);
+bool SecretErase(const std::string& key);
+
 } // namespace nr::net

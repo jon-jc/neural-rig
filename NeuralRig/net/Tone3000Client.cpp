@@ -154,6 +154,12 @@ Model ModelFrom(const nlohmann::json& object)
 
 bool Tokens::IsExpired() const
 {
+  // No access token at all counts as expired: a session restored from the
+  // credential store holds only a refresh token, and the first request must
+  // exchange it before doing anything else.
+  if (accessToken.empty())
+    return true;
+
   return NowMs() > expiresAtMs - kRefreshMarginMs;
 }
 
@@ -320,14 +326,47 @@ Tokens Tone3000Client::GetTokens() const
 
 void Tone3000Client::SetTokens(Tokens tokens)
 {
-  std::lock_guard<std::mutex> lock(mTokenMutex);
-  mTokens = std::move(tokens);
+  {
+    std::lock_guard<std::mutex> lock(mTokenMutex);
+    mTokens = std::move(tokens);
+  }
+
+  // Persist only the refresh token. The access token is short-lived and can
+  // always be re-derived, so there is no reason to widen what sits at rest.
+  const auto current = GetTokens();
+
+  if (!current.refreshToken.empty())
+    SecretStore(kRefreshTokenKey, current.refreshToken);
 }
 
 void Tone3000Client::ClearTokens()
 {
   std::lock_guard<std::mutex> lock(mTokenMutex);
   mTokens = {};
+}
+
+bool Tone3000Client::LoadSavedSession()
+{
+  std::string refreshToken;
+
+  if (!SecretLoad(kRefreshTokenKey, refreshToken) || refreshToken.empty())
+    return false;
+
+  {
+    std::lock_guard<std::mutex> lock(mTokenMutex);
+    mTokens = {};
+    mTokens.refreshToken = std::move(refreshToken);
+    // No access token yet, and expiresAtMs of 0 marks it stale, so the first
+    // request refreshes before doing anything else.
+  }
+
+  return true;
+}
+
+void Tone3000Client::SignOut()
+{
+  ClearTokens();
+  SecretErase(kRefreshTokenKey);
 }
 
 // --- Requests ---------------------------------------------------------------
