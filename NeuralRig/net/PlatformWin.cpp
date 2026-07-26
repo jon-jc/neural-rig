@@ -6,6 +6,7 @@
 
   #include <bcrypt.h>
   #include <shellapi.h>
+  #include <wincred.h>
   #include <winhttp.h>
 
   #include <memory>
@@ -13,6 +14,8 @@
   #pragma comment(lib, "winhttp.lib")
   #pragma comment(lib, "bcrypt.lib")
   #pragma comment(lib, "shell32.lib")
+  #pragma comment(lib, "credui.lib")
+  #pragma comment(lib, "advapi32.lib")
 
 namespace nr::net
 {
@@ -72,6 +75,51 @@ bool SecureRandomBytes(void* buffer, size_t numBytes)
 {
   return BCRYPT_SUCCESS(
     BCryptGenRandom(nullptr, (PUCHAR)buffer, (ULONG)numBytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG));
+}
+
+namespace
+{
+/// Credential Manager is a flat global namespace, so entries are prefixed to
+/// keep NeuralRig's out of everyone else's way.
+std::wstring CredentialTarget(const std::string& key)
+{
+  return Widen("NeuralRig/" + key);
+}
+} // namespace
+
+bool SecretStore(const std::string& key, const std::string& value)
+{
+  const auto target = CredentialTarget(key);
+
+  CREDENTIALW credential = {};
+  credential.Type = CRED_TYPE_GENERIC;
+  credential.TargetName = const_cast<LPWSTR>(target.c_str());
+  credential.CredentialBlobSize = (DWORD)value.size();
+  credential.CredentialBlob = (LPBYTE)value.data();
+  // LOCAL_MACHINE rather than ENTERPRISE: this must not roam to other machines
+  // via a domain profile.
+  credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
+
+  return CredWriteW(&credential, 0) == TRUE;
+}
+
+bool SecretLoad(const std::string& key, std::string& value)
+{
+  const auto target = CredentialTarget(key);
+
+  PCREDENTIALW credential = nullptr;
+  if (CredReadW(target.c_str(), CRED_TYPE_GENERIC, 0, &credential) != TRUE)
+    return false;
+
+  value.assign((const char*)credential->CredentialBlob, credential->CredentialBlobSize);
+  CredFree(credential);
+  return true;
+}
+
+bool SecretErase(const std::string& key)
+{
+  const auto target = CredentialTarget(key);
+  return CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0) == TRUE;
 }
 
 bool OpenUrlInBrowser(const std::string& url)

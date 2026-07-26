@@ -37,6 +37,70 @@ bool SecureRandomBytes(void* buffer, size_t numBytes)
   return SecRandomCopyBytes(kSecRandomDefault, numBytes, buffer) == errSecSuccess;
 }
 
+namespace
+{
+/// Keychain generic-password items are identified by service + account. The
+/// service is fixed so all of NeuralRig's secrets group together in Keychain
+/// Access, and the account distinguishes them.
+NSString* const kKeychainService = @"NeuralRig";
+
+NSMutableDictionary* KeychainQuery(const std::string& key)
+{
+  NSMutableDictionary* query = [NSMutableDictionary dictionary];
+  query[(__bridge id)kSecClass] = (__bridge id)kSecClassGenericPassword;
+  query[(__bridge id)kSecAttrService] = kKeychainService;
+  query[(__bridge id)kSecAttrAccount] = ToNSString(key);
+  return query;
+}
+} // namespace
+
+bool SecretStore(const std::string& key, const std::string& value)
+{
+  @autoreleasepool
+  {
+    NSData* data = [NSData dataWithBytes:value.data() length:value.size()];
+
+    // Delete any existing item first: SecItemAdd fails with errSecDuplicateItem
+    // rather than overwriting, and an update path would be more code for the
+    // same result.
+    SecItemDelete((__bridge CFDictionaryRef)KeychainQuery(key));
+
+    NSMutableDictionary* query = KeychainQuery(key);
+    query[(__bridge id)kSecValueData] = data;
+    // Available once the device has been unlocked, and never migrated to
+    // another machine by a backup.
+    query[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+
+    return SecItemAdd((__bridge CFDictionaryRef)query, nullptr) == errSecSuccess;
+  }
+}
+
+bool SecretLoad(const std::string& key, std::string& value)
+{
+  @autoreleasepool
+  {
+    NSMutableDictionary* query = KeychainQuery(key);
+    query[(__bridge id)kSecReturnData] = @YES;
+    query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
+
+    CFTypeRef result = nullptr;
+    if (SecItemCopyMatching((__bridge CFDictionaryRef)query, &result) != errSecSuccess || result == nullptr)
+      return false;
+
+    NSData* data = (__bridge_transfer NSData*)result;
+    value.assign((const char*)data.bytes, data.length);
+    return true;
+  }
+}
+
+bool SecretErase(const std::string& key)
+{
+  @autoreleasepool
+  {
+    return SecItemDelete((__bridge CFDictionaryRef)KeychainQuery(key)) == errSecSuccess;
+  }
+}
+
 bool OpenUrlInBrowser(const std::string& url)
 {
   @autoreleasepool
