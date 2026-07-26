@@ -41,7 +41,23 @@ if(NOT NAM_CORE_SOURCES)
     message(FATAL_ERROR "No NAM core sources found under external/NeuralAmpModelerCore/NAM.")
 endif()
 
-add_library(nam_core STATIC ${NAM_CORE_SOURCES})
+# OBJECT, not STATIC, and this is load-bearing.
+#
+# Each NAM architecture registers itself with a file-scope static in its own
+# translation unit, e.g. in NAM/wavenet/model.cpp:
+#
+#     static nam::ConfigParserHelper _register_WaveNet("WaveNet", create_config);
+#
+# A static library only contributes object files that resolve an undefined
+# symbol. NeuralRig calls nam::get_dsp() and nothing else, so the linker
+# discards model.cpp, lstm.cpp, convnet.cpp and linear.cpp outright, their
+# registrars never run, and the registry is empty at runtime. Every load then
+# fails with "No config parser registered for architecture: WaveNet".
+#
+# An OBJECT library links all of its objects unconditionally, so the
+# registrars survive. (Whole-archive linking would also work, but needs
+# CMake 3.24+ and per-linker handling; this is portable to our stated 3.22.)
+add_library(nam_core OBJECT ${NAM_CORE_SOURCES})
 add_library(nam::core ALIAS nam_core)
 
 target_compile_features(nam_core PUBLIC cxx_std_20)
