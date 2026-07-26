@@ -94,6 +94,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
   GetParam(kSlim)->InitDouble("Slim", 0.0, 0.0, 1.0, 0.01);
+  // Enable per capture slot. Default on, so loading into a slot makes it
+  // audible without a second click.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    const std::string name = "Slot" + std::to_string(slot + 1) + "Active";
+    GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
+  }
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -166,8 +173,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto fileWidth = 200.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
+    // The capture chain stacks one browser per slot, signal flowing top to
+    // bottom. Slot 0 sits highest; the last slot keeps the position upstream's
+    // single browser had, so the IR row below it is undisturbed.
+    const auto slotPitch = 26.0f;
     const auto modelArea =
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
+    auto slotArea = [&](size_t slot) {
+      const auto fromBottom = static_cast<float>(kNumSlots - 1 - slot);
+      return modelArea.GetVShifted(-slotPitch * fromBottom);
+    };
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
@@ -182,20 +197,22 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto settingsButtonArea = CornerButtonArea(b);
 
     // Model loader button
-    auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
-      if (fileName.GetLength())
-      {
-        // Sets mNAMPath and mStagedNAM
-        const std::string msg = _StageModel(fileName);
-        // TODO error messages like the IR loader.
-        if (msg.size())
+    auto makeLoadModelCompletionHandler = [&](size_t slot) {
+      return [this, slot](const WDL_String& fileName, const WDL_String& path) {
+        if (fileName.GetLength())
         {
-          std::stringstream ss;
-          ss << "Failed to load NAM model. Message:\n\n" << msg;
-          _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
+          // Sets mNAMPaths[slot] and mStagedModels[slot]
+          const std::string msg = _StageModel(slot, fileName);
+          // TODO error messages like the IR loader.
+          if (msg.size())
+          {
+            std::stringstream ss;
+            ss << "Failed to load NAM model. Message:\n\n" << msg;
+            _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
+          }
+          std::cout << "Loaded into slot " << (slot + 1) << ": " << fileName.Get() << std::endl;
         }
-        std::cout << "Loaded: " << fileName.Get() << std::endl;
-      }
+      };
     };
 
     // IR loader button
@@ -229,11 +246,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 #endif
     // Getting started page listing additional resources
     const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(modelArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
-                                loadModelCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
-                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
-      kCtrlTagModelFileBrowser);
+    for (size_t slot = 0; slot < kNumSlots; slot++)
+    {
+      pGraphics->AttachControl(
+        new NAMFileBrowserControl(slotArea(slot), kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
+                                  makeLoadModelCompletionHandler(slot), style, fileSVG, crossSVG, leftArrowSVG,
+                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
+        ModelBrowserCtrlTag(slot));
+    }
 
     auto hideSlimOverlay = [](IControl* pCaller) {
       IGraphics* ui = pCaller->GetUI();
@@ -355,13 +375,53 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
     triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
   }
 
-  if (mModel != nullptr)
+  // Run the capture chain. Each loaded slot feeds the next, so the second
+  // network sees the first one's actual output rather than a clean signal --
+  // which is what makes a drive capture into an amp capture behave like the
+  // real pairing.
+  //
+  // Buffers ping-pong because a capture cannot read and write the same one:
+  // its resampler is stateful and would see its own output as input.
   {
-    mModel->process(triggerOutput, mOutputPointers, nFrames);
-  }
-  else
-  {
-    _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
+    sample** chainSource = triggerOutput;
+    sample** chainDest = mOutputPointers;
+    bool processedAny = false;
+
+    for (size_t slot = 0; slot < kNumSlots; slot++)
+    {
+      if (mModels[slot] == nullptr)
+        continue;
+
+      if (GetParam(SlotActiveParam(slot))->Bool())
+      {
+        mModels[slot]->process(chainSource, chainDest, nFrames);
+      }
+      else
+      {
+        // Disabled, but still loaded: carry the audio through a delay matching
+        // this slot's latency rather than skipping it, so the plugin's
+        // reported latency does not move when the user toggles a slot.
+        for (size_t c = 0; c < numChannelsInternal; c++)
+          memcpy(chainDest[c], chainSource[c], numFrames * sizeof(sample));
+
+        _RunBypassDelay(slot, chainDest, numChannelsInternal, numFrames);
+      }
+
+      processedAny = true;
+      chainSource = chainDest;
+      chainDest = (chainDest == mOutputPointers) ? mChainPointers : mOutputPointers;
+    }
+
+    if (!processedAny)
+    {
+      _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
+    }
+    else if (chainSource != mOutputPointers)
+    {
+      // Odd number of stages left the result in the scratch buffer.
+      for (size_t c = 0; c < numChannelsInternal; c++)
+        memcpy(mOutputPointers[c], chainSource[c], numFrames * sizeof(sample));
+    }
   }
   // Apply the noise gate after the NAM
   sample** gateGainOutput =
@@ -420,6 +480,12 @@ void NeuralRig::OnIdle()
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
+  // Destroy captures the audio thread displaced. Freeing a network's weights
+  // is unbounded work, so ProcessBlock hands them over here rather than
+  // deleting them mid-block.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+    mRetiredModels[slot] = nullptr;
+
   if (mNewModelLoadedInDSP)
   {
     if (auto* pGraphics = GetUI())
@@ -457,7 +523,10 @@ bool NeuralRig::SerializeState(IByteChunk& chunk) const
   chunk.PutStr(version.Get());
   // Model directory (don't serialize the model itself; we'll just load it again
   // when we unserialize)
-  chunk.PutStr(mNAMPath.Get());
+  // One path per capture slot, in chain order, so a reopened session comes
+  // back with the same rig rather than just the first amp.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+    chunk.PutStr(mNAMPaths[slot].Get());
   chunk.PutStr(mIRPath.Get());
   return SerializeParams(chunk);
 }
@@ -484,13 +553,17 @@ void NeuralRig::OnUIOpen()
 {
   Plugin::OnUIOpen();
 
-  if (mNAMPath.GetLength())
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
-    // If it's not loaded yet, then mark as failed.
-    // If it's yet to be loaded, then the completion handler will set us straight once it runs.
-    if (mModel == nullptr && mStagedModel == nullptr)
-      SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
+    if (mNAMPaths[slot].GetLength())
+    {
+      SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadedModel, mNAMPaths[slot].GetLength(),
+                                 mNAMPaths[slot].Get());
+      // If it's not loaded yet, then mark as failed.
+      // If it's yet to be loaded, then the completion handler will set us straight once it runs.
+      if (mModels[slot] == nullptr && mStagedModels[slot] == nullptr)
+        SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadFailed);
+    }
   }
 
   if (mIRPath.GetLength())
@@ -500,7 +573,7 @@ void NeuralRig::OnUIOpen()
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
 
-  if (mModel != nullptr)
+  if (_HaveAnyModel())
   {
     _UpdateControlsFromModel();
   }
@@ -548,7 +621,14 @@ bool NeuralRig::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pDa
 {
   switch (msgTag)
   {
-    case kMsgTagClearModel: mShouldRemoveModel = true; return true;
+    case kMsgTagClearModel:
+    {
+      // The browser that sent this identifies which slot to empty.
+      const int slot = ctrlTag - kCtrlTagModelFileBrowser;
+      if (slot >= 0 && slot < static_cast<int>(kNumSlots))
+        mShouldRemoveModels[slot] = true;
+      return true;
+    }
     case kMsgTagClearIR: mShouldRemoveIR = true; return true;
     case kMsgTagHighlightColor:
     {
@@ -590,20 +670,33 @@ void NeuralRig::_AllocateIOPointers(const size_t nChans)
   mOutputPointers = new sample*[nChans];
   if (mOutputPointers == nullptr)
     throw std::runtime_error("Failed to allocate pointer to output buffer!\n");
+  if (mChainPointers != nullptr)
+    throw std::runtime_error("Tried to re-allocate mChainPointers without freeing");
+  mChainPointers = new sample*[nChans];
+  if (mChainPointers == nullptr)
+    throw std::runtime_error("Failed to allocate pointer to chain buffer!\n");
 }
 
 void NeuralRig::_ApplyDSPStaging()
 {
-  // Remove marked modules
-  if (mShouldRemoveModel)
+  // Remove marked modules. Displaced captures are handed to mRetiredModels
+  // rather than destroyed here: freeing a network's weights is unbounded work
+  // and this runs on the audio thread. OnIdle() collects them.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    mModel = nullptr;
-    mNAMPath.Set("");
-    mShouldRemoveModel = false;
-    mModelCleared = true;
-    _UpdateLatency();
-    _SetInputGain();
-    _SetOutputGain();
+    if (mShouldRemoveModels[slot])
+    {
+      if (mRetiredModels[slot] == nullptr)
+        mRetiredModels[slot] = std::move(mModels[slot]);
+
+      mModels[slot] = nullptr;
+      mNAMPaths[slot].Set("");
+      mShouldRemoveModels[slot] = false;
+      mModelCleared = true;
+      _UpdateLatency();
+      _SetInputGain();
+      _SetOutputGain();
+    }
   }
   if (mShouldRemoveIR)
   {
@@ -612,14 +705,20 @@ void NeuralRig::_ApplyDSPStaging()
     mShouldRemoveIR = false;
   }
   // Move things from staged to live
-  if (mStagedModel != nullptr)
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    mModel = std::move(mStagedModel);
-    mStagedModel = nullptr;
-    mNewModelLoadedInDSP = true;
-    _UpdateLatency();
-    _SetInputGain();
-    _SetOutputGain();
+    if (mStagedModels[slot] != nullptr)
+    {
+      if (mRetiredModels[slot] == nullptr)
+        mRetiredModels[slot] = std::move(mModels[slot]);
+
+      mModels[slot] = std::move(mStagedModels[slot]);
+      mStagedModels[slot] = nullptr;
+      mNewModelLoadedInDSP = true;
+      _UpdateLatency();
+      _SetInputGain();
+      _SetOutputGain();
+    }
   }
   if (mStagedIR != nullptr)
   {
@@ -644,6 +743,11 @@ void NeuralRig::_DeallocateIOPointers()
   }
   if (mOutputPointers != nullptr)
     throw std::runtime_error("Failed to deallocate pointer to output buffer!\n");
+  if (mChainPointers != nullptr)
+  {
+    delete[] mChainPointers;
+    mChainPointers = nullptr;
+  }
 }
 
 void NeuralRig::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels,
@@ -656,14 +760,17 @@ void NeuralRig::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, co
 
 void NeuralRig::_ResetModelAndIR(const double sampleRate, const int maxBlockSize)
 {
-  // Model
-  if (mStagedModel != nullptr)
+  // Models
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    mStagedModel->Reset(sampleRate, maxBlockSize);
-  }
-  else if (mModel != nullptr)
-  {
-    mModel->Reset(sampleRate, maxBlockSize);
+    if (mStagedModels[slot] != nullptr)
+    {
+      mStagedModels[slot]->Reset(sampleRate, maxBlockSize);
+    }
+    else if (mModels[slot] != nullptr)
+    {
+      mModels[slot]->Reset(sampleRate, maxBlockSize);
+    }
   }
 
   // IR
@@ -690,10 +797,14 @@ void NeuralRig::_ResetModelAndIR(const double sampleRate, const int maxBlockSize
 void NeuralRig::_SetInputGain()
 {
   iplug::sample inputGainDB = GetParam(kInputLevel)->Value();
-  // Input calibration
-  if ((mModel != nullptr) && (mModel->HasInputLevel()) && GetParam(kCalibrateInput)->Bool())
+  // Input calibration keys off the first capture in the chain: that is what
+  // actually receives the player's signal, so it is the only one whose trained
+  // input level says anything about how hard to drive the rig.
+  const ResamplingNAM* first = _FirstModel();
+  if ((first != nullptr) && (const_cast<ResamplingNAM*>(first)->HasInputLevel())
+      && GetParam(kCalibrateInput)->Bool())
   {
-    inputGainDB += GetParam(kInputCalibrationLevel)->Value() - mModel->GetInputLevel();
+    inputGainDB += GetParam(kInputCalibrationLevel)->Value() - const_cast<ResamplingNAM*>(first)->GetInputLevel();
   }
   mInputGain = DBToAmp(inputGainDB);
 }
@@ -701,24 +812,28 @@ void NeuralRig::_SetInputGain()
 void NeuralRig::_SetOutputGain()
 {
   double gainDB = GetParam(kOutputLevel)->Value();
-  if (mModel != nullptr)
+  // Output levelling keys off the last capture in the chain, since whatever it
+  // does to the signal is what reaches the DAW. Normalising against an earlier
+  // stage would be undone by everything after it.
+  ResamplingNAM* last = const_cast<ResamplingNAM*>(_LastModel());
+  if (last != nullptr)
   {
     const int outputMode = GetParam(kOutputMode)->Int();
     switch (outputMode)
     {
       case 1: // Normalized
-        if (mModel->HasLoudness())
+        if (last->HasLoudness())
         {
-          const double loudness = mModel->GetLoudness();
+          const double loudness = last->GetLoudness();
           const double targetLoudness = -18.0;
           gainDB += (targetLoudness - loudness);
         }
         break;
       case 2: // Calibrated
-        if (mModel->HasOutputLevel())
+        if (last->HasOutputLevel())
         {
           const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
-          const double outputLevel = mModel->GetOutputLevel();
+          const double outputLevel = last->GetOutputLevel();
           gainDB += (outputLevel - inputLevel);
         }
         break;
@@ -738,13 +853,19 @@ void NeuralRig::_ApplySlimParamToLoadedNAMs()
     if (nam::SlimmableModel* s = p->GetSlimmableModel())
       s->SetSlimmableSize(v);
   };
-  apply(mModel.get());
-  apply(mStagedModel.get());
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    apply(mModels[slot].get());
+    apply(mStagedModels[slot].get());
+  }
 }
 
-std::string NeuralRig::_StageModel(const WDL_String& modelPath)
+std::string NeuralRig::_StageModel(size_t slot, const WDL_String& modelPath)
 {
-  WDL_String previousNAMPath = mNAMPath;
+  if (slot >= kNumSlots)
+    return "Invalid capture slot";
+
+  WDL_String previousNAMPath = mNAMPaths[slot];
   try
   {
     auto dspPath = std::filesystem::u8path(modelPath.Get());
@@ -767,19 +888,20 @@ std::string NeuralRig::_StageModel(const WDL_String& modelPath)
     {
       slimmable->SetSlimmableSize(GetParam(kSlim)->Value());
     }
-    mStagedModel = std::move(temp);
-    mNAMPath = modelPath;
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+    mStagedModels[slot] = std::move(temp);
+    mNAMPaths[slot] = modelPath;
+    SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadedModel, mNAMPaths[slot].GetLength(),
+                               mNAMPaths[slot].Get());
   }
   catch (std::runtime_error& e)
   {
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
+    SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadFailed);
 
-    if (mStagedModel != nullptr)
+    if (mStagedModels[slot] != nullptr)
     {
-      mStagedModel = nullptr;
+      mStagedModels[slot] = nullptr;
     }
-    mNAMPath = previousNAMPath;
+    mNAMPaths[slot] = previousNAMPath;
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
     return e.what();
@@ -855,6 +977,7 @@ void NeuralRig::_PrepareBuffers(const size_t numChannels, const size_t numFrames
     _PrepareIOPointers(numChannels);
     mInputArray.resize(numChannels);
     mOutputArray.resize(numChannels);
+    mChainArray.resize(numChannels);
   }
   if (updateFrames)
   {
@@ -868,12 +991,75 @@ void NeuralRig::_PrepareBuffers(const size_t numChannels, const size_t numFrames
       mOutputArray[c].resize(numFrames);
       std::fill(mOutputArray[c].begin(), mOutputArray[c].end(), 0.0);
     }
+    for (auto c = 0; c < mChainArray.size(); c++)
+    {
+      mChainArray[c].resize(numFrames);
+      std::fill(mChainArray[c].begin(), mChainArray[c].end(), 0.0);
+    }
+
+    // Bypass delay lines, sized once here so ProcessBlock never allocates.
+    // Resampling latency runs to a few hundred samples at most; this covers
+    // any host rate with room to spare.
+    for (size_t slot = 0; slot < kNumSlots; slot++)
+    {
+      if (mSlotBypassDelay[slot].size() != kBypassDelayCapacity)
+      {
+        mSlotBypassDelay[slot].assign(kBypassDelayCapacity, 0.0);
+        mSlotBypassWrite[slot] = 0;
+        mSlotBypassLength[slot] = 0;
+      }
+    }
   }
   // Would these ever get changed by something?
   for (auto c = 0; c < mInputArray.size(); c++)
     mInputPointers[c] = mInputArray[c].data();
   for (auto c = 0; c < mOutputArray.size(); c++)
     mOutputPointers[c] = mOutputArray[c].data();
+  for (auto c = 0; c < mChainArray.size(); c++)
+    mChainPointers[c] = mChainArray[c].data();
+}
+
+void NeuralRig::_RunBypassDelay(size_t slot, iplug::sample** buffers, size_t numChannels, size_t numFrames)
+{
+  if (slot >= kNumSlots || mSlotBypassDelay[slot].empty())
+    return;
+
+  const int capacity = static_cast<int>(mSlotBypassDelay[slot].size());
+  int delaySamples = mModels[slot] != nullptr ? mModels[slot]->GetLatency() : 0;
+  delaySamples = std::max(0, std::min(delaySamples, capacity - 1));
+
+  if (delaySamples == 0)
+    return;
+
+  // A changed delay would otherwise read a region holding audio for the old
+  // alignment, which clicks. Clearing costs one quiet block instead.
+  if (delaySamples != mSlotBypassLength[slot])
+  {
+    std::fill(mSlotBypassDelay[slot].begin(), mSlotBypassDelay[slot].end(), 0.0);
+    mSlotBypassLength[slot] = delaySamples;
+  }
+
+  // The chain is mono, so only channel 0 carries signal.
+  auto* data = buffers[0];
+  auto& line = mSlotBypassDelay[slot];
+  int write = mSlotBypassWrite[slot];
+
+  for (size_t i = 0; i < numFrames; i++)
+  {
+    line[static_cast<size_t>(write)] = data[i];
+
+    int read = write - delaySamples;
+    if (read < 0)
+      read += capacity;
+
+    data[i] = line[static_cast<size_t>(read)];
+
+    if (++write >= capacity)
+      write = 0;
+  }
+
+  mSlotBypassWrite[slot] = write;
+  (void)numChannels;
 }
 
 void NeuralRig::_PrepareIOPointers(const size_t numChannels)
@@ -931,6 +1117,10 @@ void NeuralRig::_ProcessOutput(iplug::sample** inputs, iplug::sample** outputs, 
 
 void NeuralRig::_UpdateControlsFromModel()
 {
+  // The settings page describes one capture. Show the first in the chain,
+  // since that is the one whose input calibration the controls act on.
+  ResamplingNAM* mModel = const_cast<ResamplingNAM*>(_FirstModel());
+
   if (mModel == nullptr)
   {
     return;
@@ -966,10 +1156,17 @@ void NeuralRig::_UpdateControlsFromModel()
 
 void NeuralRig::_UpdateLatency()
 {
+  // Every loaded capture contributes its own resampling latency, so the
+  // chain's total is the sum. Deliberately independent of whether a slot is
+  // enabled: a disabled slot runs its audio through a matching delay instead,
+  // so toggling one does not make the host re-align mid-session.
   int latency = 0;
-  if (mModel)
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    latency += mModel->GetLatency();
+    if (mModels[slot])
+    {
+      latency += mModels[slot]->GetLatency();
+    }
   }
   // Other things that add latency here...
 
