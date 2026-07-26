@@ -54,12 +54,13 @@ void NeuralRig::_UnserializeApplyConfig(nlohmann::json& config)
   OnParamReset(iplug::EParamSource::kPresetRecall);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
+  // Legacy states carry a single model path; it becomes the first slot.
+  mNAMPaths[0].Set(static_cast<std::string>(config["NAMPath"]).c_str());
   mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
 
-  if (mNAMPath.GetLength())
+  if (mNAMPaths[0].GetLength())
   {
-    _StageModel(mNAMPath);
+    _StageModel(0, mNAMPaths[0]);
   }
   if (mIRPath.GetLength())
   {

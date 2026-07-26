@@ -19,6 +19,14 @@ const int kNumPresets = 1;
 // The plugin is mono inside
 constexpr size_t kNumChannelsInternal = 1;
 
+// Capture slots in the chain. Each is a full network evaluation per sample, so
+// four is both a heavy load and enough for pedal into amp into a second stage.
+constexpr size_t kNumSlots = 4;
+
+// Capacity of each slot's bypass delay line, allocated once so ProcessBlock
+// never allocates. Resampling latency is a few hundred samples at most.
+constexpr size_t kBypassDelayCapacity = 8192;
+
 class NAMSender : public iplug::IPeakAvgSender<>
 {
 public:
@@ -47,14 +55,31 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kSlim,
+  // One enable per capture slot. A disabled slot still passes its audio
+  // through a matching delay, so the reported latency does not move.
+  kSlot1Active,
+  kSlot2Active,
+  kSlot3Active,
+  kSlot4Active,
   kNumParams
 };
+
+// Parameter index of a slot's enable toggle.
+inline int SlotActiveParam(size_t slot)
+{
+  return kSlot1Active + static_cast<int>(slot);
+}
 
 const int numKnobs = 6;
 
 enum ECtrlTags
 {
+  // One file browser per capture slot. Kept contiguous and first so a slot
+  // index maps straight onto a tag.
   kCtrlTagModelFileBrowser = 0,
+  kCtrlTagModelFileBrowser2,
+  kCtrlTagModelFileBrowser3,
+  kCtrlTagModelFileBrowser4,
   kCtrlTagIRFileBrowser,
   kCtrlTagInputMeter,
   kCtrlTagOutputMeter,
@@ -67,6 +92,12 @@ enum ECtrlTags
   kCtrlTagSlimKnob,
   kNumCtrlTags
 };
+
+// Control tag of a slot's model file browser.
+inline int ModelBrowserCtrlTag(size_t slot)
+{
+  return kCtrlTagModelFileBrowser + static_cast<int>(slot);
+}
 
 enum EMsgTags
 {
@@ -230,13 +261,41 @@ private:
   void _InitToneStack();
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
-  std::string _StageModel(const WDL_String& dspFile);
+  std::string _StageModel(size_t slot, const WDL_String& dspFile);
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
   dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath);
 
-  bool _HaveModel() const { return this->mModel != nullptr; };
+  bool _HaveModel(size_t slot) const { return slot < kNumSlots && mModels[slot] != nullptr; };
+  bool _HaveAnyModel() const
+  {
+    for (size_t slot = 0; slot < kNumSlots; slot++)
+      if (mModels[slot] != nullptr)
+        return true;
+    return false;
+  };
+  // Levelling asks different questions at the two ends of the chain: input
+  // calibration belongs to the first capture, since that is what receives the
+  // player's signal, and output levelling to the last, since whatever it does
+  // is what reaches the DAW.
+  const ResamplingNAM* _FirstModel() const
+  {
+    for (size_t slot = 0; slot < kNumSlots; slot++)
+      if (mModels[slot] != nullptr)
+        return mModels[slot].get();
+    return nullptr;
+  };
+  const ResamplingNAM* _LastModel() const
+  {
+    for (size_t slot = kNumSlots; slot-- > 0;)
+      if (mModels[slot] != nullptr)
+        return mModels[slot].get();
+    return nullptr;
+  };
+  // Runs a disabled slot's audio through a delay matching what the model would
+  // have added, so the reported latency stays put.
+  void _RunBypassDelay(size_t slot, iplug::sample** buffers, size_t numChannels, size_t numFrames);
   // Prepare the input & output buffers
   void _PrepareBuffers(const size_t numChannels, const size_t numFrames);
   // Manage pointers
@@ -282,9 +341,14 @@ private:
   std::vector<std::vector<iplug::sample>> mInputArray;
   // Output from NAM
   std::vector<std::vector<iplug::sample>> mOutputArray;
+  // Second buffer so consecutive captures can ping-pong. A capture cannot read
+  // and write the same buffer: its resampler is stateful and would see its own
+  // output as input.
+  std::vector<std::vector<iplug::sample>> mChainArray;
   // Pointer versions
   iplug::sample** mInputPointers = nullptr;
   iplug::sample** mOutputPointers = nullptr;
+  iplug::sample** mChainPointers = nullptr;
 
   // Input and output gain
   double mInputGain = 1.0;
@@ -293,16 +357,31 @@ private:
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
-  // The model actually being used:
-  std::unique_ptr<ResamplingNAM> mModel;
+  // The models actually being used, in chain order. Stacking captures is the
+  // point of the plugin: an overdrive capture feeding an amp capture behaves
+  // far more like the real pairing than either alone, because the second
+  // network sees the first one's actual output rather than a clean signal.
+  std::unique_ptr<ResamplingNAM> mModels[kNumSlots];
   // And the IR
   std::unique_ptr<dsp::ImpulseResponse> mIR;
   // Manages switching what DSP is being used.
-  std::unique_ptr<ResamplingNAM> mStagedModel;
+  std::unique_ptr<ResamplingNAM> mStagedModels[kNumSlots];
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
+  // Models the audio thread has displaced, waiting to be destroyed off it.
+  // Freeing a WaveNet's weights is unbounded work, so it must not happen in
+  // ProcessBlock; OnIdle() collects these.
+  std::unique_ptr<ResamplingNAM> mRetiredModels[kNumSlots];
   // Flags to take away the modules at a safe time.
-  std::atomic<bool> mShouldRemoveModel = false;
+  std::atomic<bool> mShouldRemoveModels[kNumSlots];
   std::atomic<bool> mShouldRemoveIR = false;
+
+  // Carries a disabled slot's audio through a delay matching the latency it
+  // would have added. Without this, toggling a slot changes the plugin's
+  // reported latency and the host re-aligns mid-session -- audible as the
+  // whole track jumping.
+  std::vector<double> mSlotBypassDelay[kNumSlots];
+  int mSlotBypassWrite[kNumSlots] = {};
+  int mSlotBypassLength[kNumSlots] = {};
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
@@ -314,8 +393,8 @@ private:
   recursive_linear_filter::HighPass mHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
 
-  // Path to model's config.json or model.nam
-  WDL_String mNAMPath;
+  // Path to each slot's model.nam
+  WDL_String mNAMPaths[kNumSlots];
   // Path to IR (.wav file)
   WDL_String mIRPath;
 
