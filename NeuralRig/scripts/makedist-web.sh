@@ -8,7 +8,7 @@
 # 3rd argument : browser - either "chrome", "safari", "firefox" - if you want to launch a browser other than chrome, you must specify the correct origin for argument #2
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-IPLUG2_ROOT=..\..\..\reference\NeuralAmpModelerPlugin\iPlug2
+IPLUG2_ROOT=../../iPlug2
 PROJECT_ROOT=$SCRIPT_DIR/..
 IPLUG2_ROOT=$SCRIPT_DIR/$IPLUG2_ROOT
 FILE_PACKAGER=$EMSDK/upstream/emscripten/tools/file_packager.py

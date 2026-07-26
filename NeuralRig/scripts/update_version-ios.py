@@ -4,7 +4,7 @@
 
 import plistlib, os, sys, shutil
 
-IPLUG2_ROOT = "..\..\..\reference\NeuralAmpModelerPlugin\iPlug2"
+IPLUG2_ROOT = "../../iPlug2"
 
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 projectpath = os.path.abspath(os.path.join(scriptpath, os.pardir))
