@@ -16,6 +16,7 @@
 #include "architecture.hpp"
 
 #include "NeuralRigControls.h"
+#include "T3KBrowserControl.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -185,6 +186,8 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     };
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
+    // Sits under the rack, where the eye lands after reading the chain.
+    const auto browseButtonArea = slotArea(0).GetVShifted(-30.f).GetFromLeft(110.f).GetHShifted(-46.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
@@ -316,6 +319,30 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
                                                  crossSVG, style, radioButtonStyle),
                       kCtrlTagSettingsBox)
       ->Hide(true);
+
+    // TONE3000 browser, and the button that opens it.
+    {
+      auto* browserPage = new T3KBrowserPageControl(b, mBrowser, style);
+
+      browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
+        // Called from a worker thread. Park the path and let OnIdle stage it on
+        // the message thread rather than touching model state from here.
+        std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+        mPendingLoads.emplace_back(slot, std::string(filePath));
+      });
+
+      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser)->Hide(true);
+
+      pGraphics->AttachControl(new IVButtonControl(
+        browseButtonArea,
+        [pGraphics, this](IControl*) {
+          auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
+          mBrowser.Begin();
+          page->Refresh();
+          page->Hide(false);
+        },
+        "TONE3000", style));
+    }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
     pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
@@ -485,6 +512,35 @@ void NeuralRig::OnIdle()
   // deleting them mid-block.
   for (size_t slot = 0; slot < kNumSlots; slot++)
     mRetiredModels[slot] = nullptr;
+
+  // Stage anything the browser downloaded. Done here, on the message thread,
+  // because the download completes on a worker and staging touches state the
+  // audio thread reads.
+  {
+    std::vector<std::pair<int, std::string>> pending;
+    {
+      std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+      pending.swap(mPendingLoads);
+    }
+
+    for (const auto& [slot, path] : pending)
+    {
+      WDL_String filePath;
+      filePath.Set(path.c_str());
+      _StageModel(static_cast<size_t>(slot), filePath);
+    }
+  }
+
+  // Repaint the browser only when something actually changed, rather than at
+  // idle rate.
+  if (mBrowser.ConsumeDirty())
+  {
+    if (auto* pGraphics = GetUI())
+    {
+      if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        page->As<T3KBrowserPageControl>()->Refresh();
+    }
+  }
 
   if (mNewModelLoadedInDSP)
   {
