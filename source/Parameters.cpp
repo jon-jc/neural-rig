@@ -44,6 +44,21 @@ juce::StringArray outputModeChoices()
     return { "Raw", "Normalized", "Calibrated" };
 }
 
+juce::String slotEnabledId(int slot)
+{
+    return "slot" + juce::String(slot + 1) + "_enabled";
+}
+
+juce::String slotGainId(int slot)
+{
+    return "slot" + juce::String(slot + 1) + "_gain";
+}
+
+juce::String slotMixId(int slot)
+{
+    return "slot" + juce::String(slot + 1) + "_mix";
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
@@ -109,6 +124,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                          juce::NormalisableRange<float> { -60.0f, 60.0f, 0.1f },
                          12.0f,
                          [](float value, int) { return juce::String(value, 1) + " dBu"; }));
+
+    // --- Capture slots ------------------------------------------------------
+    for (int slot = 0; slot < numSlots; ++slot)
+    {
+        const auto label = "Slot " + juce::String(slot + 1) + " ";
+
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { slotEnabledId(slot), 1 }, label + "On", true));
+
+        // Trim between stages. A capture expects a certain level at its input,
+        // and the previous stage in the chain has no idea what that is.
+        layout.add(makeFloat(slotGainId(slot), label + "Gain",
+                             juce::NormalisableRange<float> { -24.0f, 24.0f, 0.1f },
+                             0.0f, formatDecibels));
+
+        layout.add(makeFloat(slotMixId(slot), label + "Mix",
+                             juce::NormalisableRange<float> { 0.0f, 100.0f, 0.1f },
+                             100.0f, formatPercent));
+    }
 
     return layout;
 }

@@ -39,6 +39,17 @@ inline constexpr auto calibrateInput = "calibrate_input";
 inline constexpr auto inputCalibrationLevel = "input_calibration_level";
 } // namespace id
 
+/** Capture slots in the rig. Each is a full network evaluation per sample, so
+    four is both a heavy load and enough for pedal into amp into a second
+    stage. Must match nr::dsp::RigChain::numSlots. */
+inline constexpr int numSlots = 4;
+
+/** Per-slot parameter IDs. Built at runtime rather than declared individually
+    so adding a slot is a one-line change instead of three per slot. */
+juce::String slotEnabledId(int slot);
+juce::String slotGainId(int slot);
+juce::String slotMixId(int slot);
+
 /** How the level of the loaded model is compensated on the way out.
 
     NAM captures carry loudness metadata from the trainer, and newer ones also

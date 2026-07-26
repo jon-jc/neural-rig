@@ -4,8 +4,8 @@
 
 #include "Parameters.h"
 #include "dsp/LevelCalibration.h"
-#include "dsp/ModelSlot.h"
 #include "dsp/NoiseGate.h"
+#include "dsp/RigChain.h"
 #include "dsp/ToneStack.h"
 
 namespace nr
@@ -16,7 +16,12 @@ namespace nr
 
     Signal path, all mono internally because a NAM capture is mono:
 
-        input trim (calibrated) -> gate -> capture -> tone stack -> output trim
+        input trim (calibrated) -> gate -> capture chain -> tone stack -> output trim
+
+    The chain holds up to four captures in series. Stacking them is the point:
+    an overdrive capture feeding an amp capture behaves far more like the real
+    pairing than either alone, because the second network sees the first one's
+    actual output rather than a clean guitar signal.
 
     The gate sits ahead of the capture deliberately. Silence fed into a neural
     amp comes back as that amp's own noise floor, so gating afterwards means
@@ -64,18 +69,23 @@ public:
     // --- NeuralRig ----------------------------------------------------------
     juce::AudioProcessorValueTreeState& state() noexcept { return apvts; }
 
-    /** Loads a .nam in the background and swaps it in when ready. Safe to call
-        from the message thread; returns immediately. */
-    void loadModel(const juce::File& file);
+    /** Loads a .nam into a slot in the background and swaps it in when ready.
+        Safe to call from the message thread; returns immediately. */
+    void loadModel(int slot, const juce::File& file);
 
-    /** Unloads the current capture, leaving the signal path clean. */
-    void clearModel();
+    /** Empties a slot, removing it from the chain. */
+    void clearModel(int slot);
 
-    /** Name of the loaded capture, or an empty string. Message thread. */
-    juce::String loadedModelName() const;
+    /** Reorders the rig. A drive capture before an amp capture is a different
+        instrument from the reverse, so this is a musical control, not a
+        cosmetic one. */
+    void swapSlots(int firstSlot, int secondSlot);
 
-    /** Reason the last load failed, or empty if it succeeded. Message thread. */
-    juce::String lastLoadError() const;
+    /** Name of the capture in a slot, or an empty string. Message thread. */
+    juce::String loadedModelName(int slot) const;
+
+    /** Reason the last load into a slot failed, or empty. Message thread. */
+    juce::String lastLoadError(int slot) const;
 
     /** Bumped whenever a load completes, so the editor can refresh without
         polling strings. */
@@ -105,16 +115,26 @@ private:
         std::atomic<float>* outputMode = nullptr;
         std::atomic<float>* calibrateInput = nullptr;
         std::atomic<float>* inputCalibrationLevel = nullptr;
+
+        struct Slot
+        {
+            std::atomic<float>* enabled = nullptr;
+            std::atomic<float>* gain = nullptr;
+            std::atomic<float>* mix = nullptr;
+        };
+
+        std::array<Slot, params::numSlots> slots {};
     };
 
     void timerCallback() override;
-    void refreshGainsFor(const dsp::NamModel* model) noexcept;
-    void publishLatencyFor(const dsp::NamModel* model);
+    void refreshGains() noexcept;
+    void publishLatency();
+    std::array<dsp::NodeSettings, dsp::RigChain::numSlots> readSlotSettings() const noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
     ParameterHandles handles;
 
-    dsp::ModelSlot modelSlot;
+    dsp::RigChain chain;
     dsp::NoiseGate gate;
     dsp::ToneStack toneStack;
 
@@ -135,11 +155,11 @@ private:
     std::atomic<float> gateReduction { 0.0f };
     std::atomic<int> modelGeneration { 0 };
 
-    // Guards the strings below, which the loader thread writes and the message
+    // Guards the strings below, which the loader threads write and the message
     // thread reads.
     mutable juce::CriticalSection modelInfoLock;
-    juce::String modelName;
-    juce::String loadError;
+    std::array<juce::String, params::numSlots> slotNames;
+    std::array<juce::String, params::numSlots> slotErrors;
 
     // Serialises background loads so two rapid requests cannot race.
     juce::ThreadPool loaderPool { 1 };

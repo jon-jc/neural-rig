@@ -13,8 +13,10 @@ target_sources(NeuralRigTests PRIVATE
     LevelCalibrationTests.cpp
     ToneStackTests.cpp
     ModelSlotTests.cpp
+    RigChainTests.cpp
     ${CMAKE_SOURCE_DIR}/source/dsp/ToneStack.cpp
     ${CMAKE_SOURCE_DIR}/source/dsp/ModelSlot.cpp
+    ${CMAKE_SOURCE_DIR}/source/dsp/RigChain.cpp
     ${CMAKE_SOURCE_DIR}/source/dsp/RateAdapter.cpp
     ${CMAKE_SOURCE_DIR}/source/dsp/NamModel.cpp)
 

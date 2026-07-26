@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <memory>
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
@@ -42,6 +45,35 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PeakMeter)
 };
 
+/** One position in the rig: load, name, on/off, reorder, clear. */
+class SlotRow final : public juce::Component
+{
+public:
+    SlotRow(NeuralRigProcessor&, int slotIndex);
+
+    void refresh();
+    void paint(juce::Graphics&) override;
+    void resized() override;
+
+private:
+    void chooseFile();
+
+    NeuralRigProcessor& audioProcessor;
+    const int index;
+
+    juce::Label positionLabel;
+    juce::Label nameLabel;
+    juce::TextButton loadButton { "LOAD" };
+    juce::TextButton clearButton { "\xc3\x97" };
+    juce::TextButton moveUpButton { "\xe2\x86\x91" };
+    juce::ToggleButton enableToggle;
+
+    juce::AudioProcessorValueTreeState::ButtonAttachment enableAttachment;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SlotRow)
+};
+
 class NeuralRigEditor final : public juce::AudioProcessorEditor,
                               private juce::Timer
 {
@@ -57,20 +89,13 @@ private:
 
     // Not named `processor`: AudioProcessorEditor already has a member by that
     // name, and shadowing it trips -Wshadow-field on Clang.
-    void refreshModelDisplay();
-    void chooseModel();
-
     NeuralRigProcessor& audioProcessor;
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;
+    juce::Label rackLabel;
 
-    juce::TextButton loadButton { "LOAD CAPTURE" };
-    juce::TextButton clearButton { "CLEAR" };
-    juce::Label modelLabel;
-
-    std::unique_ptr<juce::FileChooser> fileChooser;
-    int lastSeenModelGeneration = -1;
+    std::array<std::unique_ptr<SlotRow>, params::numSlots> slotRows;
 
     LabelledKnob inputKnob;
     LabelledKnob outputKnob;
@@ -78,6 +103,8 @@ private:
 
     PeakMeter inputMeter;
     PeakMeter outputMeter;
+
+    int lastSeenModelGeneration = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeuralRigEditor)
 };

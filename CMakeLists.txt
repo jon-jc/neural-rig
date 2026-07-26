@@ -62,7 +62,8 @@ target_sources(NeuralRig PRIVATE
     source/dsp/NamModel.cpp
     source/dsp/ToneStack.cpp
     source/dsp/ModelSlot.cpp
-    source/dsp/NoiseGate.cpp)
+    source/dsp/NoiseGate.cpp
+    source/dsp/RigChain.cpp)
 
 target_include_directories(NeuralRig PRIVATE source)
 
