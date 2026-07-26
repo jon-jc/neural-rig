@@ -3,128 +3,110 @@
 A guitar amp plugin built on [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler).
 
 Where the stock NAM plugin loads one capture at a time, NeuralRig is a **rig**: a
-chain of NAM captures and effects, plus a **TONE3000 browser built into the
-plugin** so you can search, filter, download and audition profiles without ever
-leaving your DAW.
+chain of NAM captures, plus a **TONE3000 browser built into the plugin** so you
+can search, filter, download and audition profiles without leaving your DAW.
 
-Formats: **VST3**, **Standalone**, and **AU** on macOS.
+Formats: **VST3**, **AU**, **AAX**, **Standalone**.
 
 ---
 
-## Status
+## Tone parity
 
-| Milestone | Scope | State |
-|---|---|---|
-| M1 | CMake + JUCE build, CI, parameter tree, I/O staging | in review |
-| M2 | Single-NAM engine: loading, resampling, calibration, gate, tone stack, IR | planned |
-| M3 | Multi-node chain engine with real-time-safe hot swap | planned |
-| M4 | TONE3000 in-plugin browser (OAuth, search, download, instant load) | planned |
-| M5 | Effects rack: drive, comp, EQ, delay, reverb | planned |
-| M6 | UI/UX polish, presets, A/B compare | planned |
+NeuralRig is derived directly from
+[NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin)
+and keeps its signal path intact, so a single loaded capture sounds exactly
+like it does in the original plugin:
 
-Each milestone lands as its own pull request against `main`, built on Windows,
-macOS and Linux by CI before merge.
+```
+input trim (calibrated)
+  → noise gate trigger
+  → NAM capture (resampled to its trained rate)
+  → noise gate gain
+  → tone stack (bass / middle / treble)
+  → impulse response
+  → DC-blocking high-pass
+  → output trim
+```
+
+Two details in that chain are easy to get wrong and are worth naming, because
+getting either wrong changes the tone:
+
+- The noise gate is **split**. It triggers on the *input* — so the decision to
+  open is made on the player's clean signal — but applies its gain *after* the
+  model, so the capture's own noise floor is attenuated too. Gating entirely
+  before the model leaves that noise floor untouched; gating entirely after it
+  makes the gate stutter on the model's output.
+- The **DC-blocking high-pass after the IR** is not cosmetic. Neural models can
+  emit a small DC offset, and without the blocker it accumulates through
+  anything downstream.
+
+Everything runs in `double` throughout, matching iPlug2's `sample` type and the
+defaults of both `NAM_SAMPLE` and `DSP_SAMPLE`.
 
 ---
 
 ## Building
 
-Requires **CMake 3.22+** and a **C++20** compiler.
+Requires **Visual Studio 2022** (Windows) or **Xcode** (macOS), plus **Python 3**.
 
 ```bash
 git clone --recurse-submodules https://github.com/jon-jc/neural-rig.git
 cd neural-rig
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
 ```
 
-If you cloned without `--recurse-submodules`:
+Fetch the SDKs iPlug2 needs (once):
 
 ```bash
-git submodule update --init --recursive
+cd iPlug2/Dependencies/IPlug && ./download-iplug-sdks.sh && cd -
+cd iPlug2/Dependencies && ./download-prebuilt-libs.sh && cd -
 ```
 
-Artefacts land in `build/NeuralRig_artefacts/Release/`.
+Then build:
 
-### Platform notes
+```bash
+cd NeuralRig/scripts && ./makedist-win.bat full zip     # Windows
+cd NeuralRig/scripts && ./makedist-mac.sh full zip      # macOS
+```
 
-- **Windows** — Visual Studio 2022 Build Tools with the C++ workload. The MSVC
-  runtime is linked statically so the VST3 needs no redistributable.
-- **macOS** — builds a universal `arm64` + `x86_64` binary, deployment target 10.15.
-- **Linux** — needs ALSA, X11, FreeType, Fontconfig and libcurl development
-  packages; see `.github/workflows/build.yml` for the exact list.
+Or open `NeuralRig/NeuralRig.sln` / `NeuralRig.xcworkspace` directly.
+
+**Linux is not supported.** iPlug2 does not target it, which is the trade made
+in exchange for a permissive licence and upstream parity.
 
 ---
 
 ## Layout
 
-```
-source/
-  Parameters.*        host-facing parameter tree, defined once
-  PluginProcessor.*   audio thread: I/O staging and the chain
-  PluginEditor.*      UI
-  NamSupport.*        the only place NAM/Eigen/json headers are included
-  dsp/                signal processing
-cmake/
-  NamCore.cmake       builds the nam_core and eigen targets
-tests-cpp/            DSP unit tests (juce::UnitTest)
-external/             vendored dependencies, as git submodules
-```
+Mirrors upstream's, because iPlug2's project files reference dependencies by
+relative path (`..\..\iPlug2\...`) and will not resolve otherwise.
 
-`NamSupport` exists deliberately: NAM's headers pull in Eigen and
-nlohmann/json, which are slow to compile and noisy under JUCE's warning
-settings. Confining them to one translation unit keeps the rest of the build
-fast and lets us compile our own code with warnings-as-errors.
+```
+iPlug2/                 plugin framework (submodule)
+NeuralAmpModelerCore/   NAM inference engine (submodule)
+AudioDSPTools/          gate, IR, filters, resampler (submodule)
+eigen/                  linear algebra (submodule)
+NeuralRig/              the plugin
+  config.h              plugin identity and IDs
+  NeuralRig.cpp/.h      processor
+  NeuralRigControls.h   IGraphics UI
+  ToneStack.cpp/.h      bass / middle / treble
+  projects/             Visual Studio and Xcode projects
+  scripts/              build and packaging
+common-win.props        shared MSBuild settings
+common-mac.xcconfig     shared Xcode settings
+```
 
 ---
 
-## Sample type
+## Licence
 
-`nam_core` is compiled with `NAM_SAMPLE_FLOAT`. JUCE hands us `float` buffers
-and NAM's inference is single-precision Eigen throughout, so this removes a
-`double`↔`float` conversion at every node of the chain at no cost in accuracy.
+MIT — see `LICENSE`. Derived from NeuralAmpModelerPlugin, Copyright (c) 2022
+Steven Atkinson, also MIT.
 
-## Why not AudioDSPTools?
-
-The upstream NAM plugin gets its gate, IR, filters and resampler from
-[AudioDSPTools](https://github.com/sdatkinson/AudioDSPTools). NeuralRig
-deliberately does not, for two concrete reasons:
-
-- Its `ResamplingContainer` — the one component with no JUCE equivalent —
-  `#include`s `Dependencies/WDL/ptrlist.h` and `Dependencies/LanczosResampler.h`,
-  which come from iPlug2 and are not vendored in the AudioDSPTools repo. It
-  does not compile standalone.
-- `NoiseGate`, `ImpulseResponse` and `RecursiveLinearFilter` hardcode `double`
-  in signatures that its own `DSP_SAMPLE_FLOAT` switch is meant to control, so
-  the library cannot actually be built single-precision.
-
-JUCE already provides better-tested equivalents — `juce::dsp::Convolution`
-(partitioned FFT, versus a direct convolution), `juce::dsp::IIR`,
-`juce::Interpolators` and `AudioFormatManager` — so NeuralRig builds on those
-and keeps the whole signal path in `float`.
-
----
-
-## Third-party code
-
-| Project | Licence | Use |
-|---|---|---|
-| [JUCE](https://github.com/juce-framework/JUCE) | GPLv3 / commercial | Plugin framework, DSP and UI |
-| [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) | MIT | NAM inference engine |
-| [Eigen](https://gitlab.com/libeigen/eigen) | MPL2 | Linear algebra |
-| [nlohmann/json](https://github.com/nlohmann/json) | MIT | `.nam` file parsing (vendored inside NAM core) |
-
-All are pinned git submodules under `external/`; none of their source is
-copied into this repository.
-
-NeuralRig uses JUCE under its GPLv3 option, so **this project is GPLv3** — see
-`LICENSE`. Shipping it under a closed licence would require a commercial JUCE
-licence.
-
-Captures are produced by the NAM trainer at
-[sdatkinson/neural-amp-modeler](https://github.com/sdatkinson/neural-amp-modeler)
-(MIT), which NeuralRig plays but does not include.
+`PLUG_UNIQUE_ID` and `PLUG_MFR_ID` are deliberately distinct from upstream's so
+that NeuralRig and the original NAM plugin can coexist in a host without their
+registries colliding.
 
 TONE3000 integration uses the public [TONE3000 API](https://www.tone3000.com/api).
-Profiles downloaded through it remain under whatever licence their author
-chose; NeuralRig surfaces that licence in the browser UI.
+Profiles downloaded through it stay under whatever licence their author chose;
+NeuralRig surfaces that licence in the browser.
