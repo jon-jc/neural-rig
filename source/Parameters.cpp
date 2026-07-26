@@ -98,6 +98,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         outputModeChoices(),
         static_cast<int>(OutputMode::normalized)));
 
+    // When on, the input trim is offset so the capture receives the level it
+    // was trained at rather than whatever the DAW happens to be sending.
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { id::calibrateInput, 1 }, "Calibrate Input", false));
+
+    // The dBu level that 0 dBFS in the DAW represents. 12 dBu matches the
+    // stock NAM plugin's default, so rigs port across without a level jump.
+    layout.add(makeFloat(id::inputCalibrationLevel, "Input Calibration",
+                         juce::NormalisableRange<float> { -60.0f, 60.0f, 0.1f },
+                         12.0f,
+                         [](float value, int) { return juce::String(value, 1) + " dBu"; }));
+
     return layout;
 }
 

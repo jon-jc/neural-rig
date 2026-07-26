@@ -7,7 +7,7 @@ namespace nr
 namespace
 {
 constexpr int editorWidth = 620;
-constexpr int editorHeight = 320;
+constexpr int editorHeight = 380;
 constexpr int meterFloorDb = -60;
 
 const juce::Colour backgroundColour { 0xff14161a };
@@ -110,8 +110,66 @@ NeuralRigEditor::NeuralRigEditor(NeuralRigProcessor& p)
     for (auto* meter : { &inputMeter, &outputMeter })
         addAndMakeVisible(meter);
 
+    modelLabel.setJustificationType(juce::Justification::centredLeft);
+    modelLabel.setColour(juce::Label::textColourId, textColour);
+    modelLabel.setFont(juce::FontOptions { 14.0f });
+    addAndMakeVisible(modelLabel);
+
+    loadButton.onClick = [this] { chooseModel(); };
+    clearButton.onClick = [this] { audioProcessor.clearModel(); };
+
+    for (auto* button : { &loadButton, &clearButton })
+    {
+        button->setColour(juce::TextButton::buttonColourId, juce::Colour { 0xff262b33 });
+        button->setColour(juce::TextButton::textColourOffId, textColour);
+        addAndMakeVisible(button);
+    }
+
+    refreshModelDisplay();
+
     setSize(editorWidth, editorHeight);
     startTimerHz(30);
+}
+
+void NeuralRigEditor::chooseModel()
+{
+    fileChooser = std::make_unique<juce::FileChooser>("Load a NAM capture", juce::File {}, "*.nam");
+
+    // Not named `flags`: juce::Component already has a member by that name.
+    const auto chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    fileChooser->launchAsync(chooserFlags, [this](const juce::FileChooser& chooser) {
+        const auto file = chooser.getResult();
+
+        // An empty result means the user cancelled, which is not an error.
+        if (file != juce::File {})
+            audioProcessor.loadModel(file);
+    });
+}
+
+void NeuralRigEditor::refreshModelDisplay()
+{
+    const auto name = audioProcessor.loadedModelName();
+    const auto error = audioProcessor.lastLoadError();
+
+    if (error.isNotEmpty())
+    {
+        modelLabel.setColour(juce::Label::textColourId, juce::Colour { 0xffef4444 });
+        modelLabel.setText(error, juce::dontSendNotification);
+    }
+    else if (name.isNotEmpty())
+    {
+        modelLabel.setColour(juce::Label::textColourId, textColour);
+        modelLabel.setText(name, juce::dontSendNotification);
+    }
+    else
+    {
+        modelLabel.setColour(juce::Label::textColourId, mutedTextColour);
+        modelLabel.setText("No capture loaded \xe2\x80\x94 signal passes through clean",
+                           juce::dontSendNotification);
+    }
+
+    clearButton.setEnabled(name.isNotEmpty());
 }
 
 NeuralRigEditor::~NeuralRigEditor()
@@ -123,6 +181,14 @@ void NeuralRigEditor::timerCallback()
 {
     inputMeter.setLevelDb(audioProcessor.inputPeakDb());
     outputMeter.setLevelDb(audioProcessor.outputPeakDb());
+
+    // Only touch the labels when a load has actually completed; comparing a
+    // counter avoids rebuilding strings 30 times a second.
+    if (const auto generation = audioProcessor.modelChangeCount(); generation != lastSeenModelGeneration)
+    {
+        lastSeenModelGeneration = generation;
+        refreshModelDisplay();
+    }
 }
 
 void NeuralRigEditor::paint(juce::Graphics& g)
@@ -147,6 +213,13 @@ void NeuralRigEditor::resized()
     auto header = bounds.removeFromTop(56);
     titleLabel.setBounds(header.removeFromTop(32));
     subtitleLabel.setBounds(header);
+
+    auto modelRow = bounds.removeFromTop(38).reduced(0, 4);
+    loadButton.setBounds(modelRow.removeFromLeft(130));
+    modelRow.removeFromLeft(8);
+    clearButton.setBounds(modelRow.removeFromRight(70));
+    modelRow.removeFromRight(8);
+    modelLabel.setBounds(modelRow);
 
     bounds.removeFromBottom(28);
     auto body = bounds.reduced(16);

@@ -57,7 +57,12 @@ target_sources(NeuralRig PRIVATE
     source/PluginProcessor.cpp
     source/PluginEditor.cpp
     source/Parameters.cpp
-    source/NamSupport.cpp)
+    source/NamSupport.cpp
+    source/dsp/RateAdapter.cpp
+    source/dsp/NamModel.cpp
+    source/dsp/ToneStack.cpp
+    source/dsp/ModelSlot.cpp
+    source/dsp/NoiseGate.cpp)
 
 target_include_directories(NeuralRig PRIVATE source)
 
@@ -96,4 +101,11 @@ if(NR_WERROR)
     else()
         target_compile_options(NeuralRig PRIVATE -Werror)
     endif()
+endif()
+
+# --- Tests ------------------------------------------------------------------
+option(NR_BUILD_TESTS "Build the DSP unit tests" ON)
+if(NR_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests-cpp)
 endif()
