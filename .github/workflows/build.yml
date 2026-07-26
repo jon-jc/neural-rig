@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Windows and macOS only. iPlug2 does not target Linux — that is the trade made
+# in exchange for a permissive licence and parity with the upstream NAM plugin.
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # iPlug2 does not vendor the VST3 SDK or its prebuilt libraries; both are
+      # fetched on demand. Cached because they are large and never change for a
+      # given iPlug2 revision.
+      - name: Cache iPlug2 SDKs
+        id: cache-sdks
+        uses: actions/cache@v4
+        with:
+          path: |
+            iPlug2/Dependencies/Build
+            iPlug2/Dependencies/IPlug/VST3_SDK
+          key: iplug2-sdks-${{ runner.os }}-${{ hashFiles('.gitmodules') }}
+
+      - name: Download VST3 SDK
+        if: steps.cache-sdks.outputs.cache-hit != 'true'
+        run: ./download-iplug-sdks.sh
+        working-directory: iPlug2/Dependencies/IPlug
+        shell: bash
+
+      - name: Download prebuilt libs
+        if: steps.cache-sdks.outputs.cache-hit != 'true'
+        run: ./download-prebuilt-libs.sh
+        working-directory: iPlug2/Dependencies
+        shell: bash
+
+      - name: Add MSBuild to PATH
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build VST3 (Windows)
+        if: runner.os == 'Windows'
+        run: msbuild NeuralRig\NeuralRig.sln /t:"NeuralRig-vst3" /p:Configuration=Release /p:Platform=x64 /v:minimal
+        shell: cmd
+
+      - name: Build Standalone (Windows)
+        if: runner.os == 'Windows'
+        run: msbuild NeuralRig\NeuralRig.sln /t:"NeuralRig-app" /p:Configuration=Release /p:Platform=x64 /v:minimal
+        shell: cmd
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xcodebuild -project projects/NeuralRig-macOS.xcodeproj \
+            -scheme macOS-VST3 -configuration Release \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        working-directory: NeuralRig
+        shell: bash
+
+      - name: Upload Windows artefacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuralRig-Windows
+          path: NeuralRig/build-win/**/*.vst3
+          if-no-files-found: error
+
+      - name: Upload macOS artefacts
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuralRig-macOS
+          path: NeuralRig/build-mac/**
+          if-no-files-found: warn

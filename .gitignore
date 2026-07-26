@@ -57,3 +57,4 @@ CLAUDE.md
 # Downloaded model cache used during manual testing
 /models-cache/
 *.nam.download
+build.log
