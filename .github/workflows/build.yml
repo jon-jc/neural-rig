@@ -42,8 +42,12 @@ jobs:
             libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev \
             libfreetype-dev libfontconfig1-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
-            libxinerama-dev libxrandr-dev libxrender-dev \
-            libglu1-mesa-dev mesa-common-dev ninja-build
+            libxi-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev ninja-build
+          # libxi-dev supplies X11/extensions/XInput2.h, which juce_gui_basics
+          # includes unconditionally. webkit2gtk and gtk+-x11 are reported
+          # missing during configure but are only needed for JUCE_WEB_BROWSER,
+          # which is off — the TONE3000 browser is native, not a webview.
 
       - name: Set up Ninja
         if: runner.os != 'Linux'
