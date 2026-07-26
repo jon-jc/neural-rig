@@ -54,6 +54,22 @@ NSMutableDictionary* KeychainQuery(const std::string& key)
 }
 } // namespace
 
+std::string UserDataDirectory()
+{
+  @autoreleasepool
+  {
+    NSArray<NSURL*>* urls = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
+                                                                   inDomains:NSUserDomainMask];
+    if (urls.count == 0)
+      return {};
+
+    NSURL* directory = [urls.firstObject URLByAppendingPathComponent:@"NeuralRig"];
+    const std::string path = directory.path.UTF8String;
+
+    return EnsureDirectory(path) ? path : std::string{};
+  }
+}
+
 bool SecretStore(const std::string& key, const std::string& value)
 {
   @autoreleasepool

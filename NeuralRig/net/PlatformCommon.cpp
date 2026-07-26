@@ -1,7 +1,23 @@
 #include "Platform.h"
 
+#include <filesystem>
+
 namespace nr::net
 {
+
+bool EnsureDirectory(const std::string& path)
+{
+  if (path.empty())
+    return false;
+
+  std::error_code error;
+  std::filesystem::create_directories(std::filesystem::u8path(path), error);
+
+  // create_directories reports false when the directory already existed, which
+  // is a success for our purposes; ask the filesystem instead.
+  return std::filesystem::is_directory(std::filesystem::u8path(path), error);
+}
+
 namespace
 {
 // RFC 4648 §5: the URL-safe alphabet, '+' and '/' replaced by '-' and '_'.

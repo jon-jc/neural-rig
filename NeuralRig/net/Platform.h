@@ -85,4 +85,12 @@ bool SecretStore(const std::string& key, const std::string& value);
 bool SecretLoad(const std::string& key, std::string& value);
 bool SecretErase(const std::string& key);
 
+/// Per-user directory for NeuralRig's own data, created if absent.
+/// %LOCALAPPDATA%\NeuralRig on Windows, ~/Library/Application Support/NeuralRig
+/// on macOS. Returns an empty string if it could not be created.
+std::string UserDataDirectory();
+
+/// Creates a directory, including missing parents. True if it exists after.
+bool EnsureDirectory(const std::string& path);
+
 } // namespace nr::net

@@ -5,7 +5,9 @@
   #include <windows.h>
 
   #include <bcrypt.h>
+  #include <knownfolders.h>
   #include <shellapi.h>
+  #include <shlobj.h>
   #include <wincred.h>
   #include <winhttp.h>
 
@@ -86,6 +88,22 @@ std::wstring CredentialTarget(const std::string& key)
   return Widen("NeuralRig/" + key);
 }
 } // namespace
+
+std::string UserDataDirectory()
+{
+  PWSTR localAppData = nullptr;
+  if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData)))
+    return {};
+
+  const int needed =
+    WideCharToMultiByte(CP_UTF8, 0, localAppData, -1, nullptr, 0, nullptr, nullptr);
+  std::string path(needed > 0 ? needed - 1 : 0, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, localAppData, -1, path.data(), needed, nullptr, nullptr);
+  CoTaskMemFree(localAppData);
+
+  path += "\\NeuralRig";
+  return EnsureDirectory(path) ? path : std::string{};
+}
 
 bool SecretStore(const std::string& key, const std::string& value)
 {
