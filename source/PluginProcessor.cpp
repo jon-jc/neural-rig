@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 
+#include <utility>
+
 #include "PluginEditor.h"
 
 namespace nr
@@ -42,6 +44,16 @@ void NeuralRigProcessor::ParameterHandles::attachTo(juce::AudioProcessorValueTre
     outputMode = tree.getRawParameterValue(params::id::outputMode);
     calibrateInput = tree.getRawParameterValue(params::id::calibrateInput);
     inputCalibrationLevel = tree.getRawParameterValue(params::id::inputCalibrationLevel);
+
+    for (int slot = 0; slot < params::numSlots; ++slot)
+    {
+        auto& handle = slots[static_cast<size_t>(slot)];
+        handle.enabled = tree.getRawParameterValue(params::slotEnabledId(slot));
+        handle.gain = tree.getRawParameterValue(params::slotGainId(slot));
+        handle.mix = tree.getRawParameterValue(params::slotMixId(slot));
+
+        jassert(handle.enabled != nullptr && handle.gain != nullptr && handle.mix != nullptr);
+    }
 
     jassert(inputLevel != nullptr && outputLevel != nullptr && mix != nullptr);
     jassert(outputMode != nullptr && inputCalibrationLevel != nullptr);
@@ -96,16 +108,13 @@ void NeuralRigProcessor::prepareToPlay(double sampleRate, int maximumExpectedSam
     monoBuffer.clear();
     dryBuffer.clear();
 
-    // The active capture was prepared for the previous rate and block size.
-    // Re-preparing here is safe: the audio thread is stopped during
-    // prepareToPlay, so nothing is reading it.
-    if (auto* model = modelSlot.current())
-    {
-        model->prepare(sampleRate, maximumExpectedSamplesPerBlock);
-        publishLatencyFor(model);
-    }
+    // Captures already loaded were prepared for the previous rate and block
+    // size. Re-preparing here is safe: the audio thread is stopped during
+    // prepareToPlay, so nothing is reading them.
+    chain.prepare(sampleRate, maximumExpectedSamplesPerBlock);
+    publishLatency();
 
-    refreshGainsFor(modelSlot.current());
+    refreshGains();
     inputGain.setCurrentAndTargetValue(inputGain.getTargetValue());
     outputGain.setCurrentAndTargetValue(outputGain.getTargetValue());
     wetAmount.setCurrentAndTargetValue(wetAmount.getTargetValue());
@@ -120,7 +129,7 @@ void NeuralRigProcessor::releaseResources()
     dryBuffer.setSize(0, 0);
 }
 
-void NeuralRigProcessor::refreshGainsFor(const dsp::NamModel* model) noexcept
+void NeuralRigProcessor::refreshGains() noexcept
 {
     dsp::CalibrationSettings settings;
     settings.inputTrimDb = handles.inputLevel->load(std::memory_order_relaxed);
@@ -130,11 +139,38 @@ void NeuralRigProcessor::refreshGainsFor(const dsp::NamModel* model) noexcept
     settings.outputMode =
         static_cast<dsp::OutputMode>(juce::roundToInt(handles.outputMode->load(std::memory_order_relaxed)));
 
-    const auto* info = model != nullptr ? &model->info() : nullptr;
+    // With several captures in series the two ends of the chain answer
+    // different questions. Input calibration belongs to the first capture,
+    // since that is what actually receives the player's signal. Output
+    // levelling belongs to the last, since whatever it does is what reaches
+    // the DAW — normalising against an earlier stage would be undone by
+    // everything after it.
+    const auto* first = chain.firstLoaded();
+    const auto* last = chain.lastLoaded();
 
-    inputGain.setTargetValue(juce::Decibels::decibelsToGain(dsp::computeInputGainDb(settings, info)));
-    outputGain.setTargetValue(juce::Decibels::decibelsToGain(dsp::computeOutputGainDb(settings, info)));
+    const auto* inputInfo = first != nullptr ? &first->info() : nullptr;
+    const auto* outputInfo = last != nullptr ? &last->info() : nullptr;
+
+    inputGain.setTargetValue(juce::Decibels::decibelsToGain(dsp::computeInputGainDb(settings, inputInfo)));
+    outputGain.setTargetValue(juce::Decibels::decibelsToGain(dsp::computeOutputGainDb(settings, outputInfo)));
     wetAmount.setTargetValue(handles.mix->load(std::memory_order_relaxed) * 0.01f);
+}
+
+std::array<dsp::NodeSettings, dsp::RigChain::numSlots> NeuralRigProcessor::readSlotSettings() const noexcept
+{
+    std::array<dsp::NodeSettings, dsp::RigChain::numSlots> settings {};
+
+    for (int slot = 0; slot < dsp::RigChain::numSlots; ++slot)
+    {
+        const auto& handle = handles.slots[static_cast<size_t>(slot)];
+        auto& setting = settings[static_cast<size_t>(slot)];
+
+        setting.bypassed = handle.enabled->load(std::memory_order_relaxed) <= 0.5f;
+        setting.gainDb = handle.gain->load(std::memory_order_relaxed);
+        setting.mixPercent = handle.mix->load(std::memory_order_relaxed);
+    }
+
+    return settings;
 }
 
 void NeuralRigProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -151,10 +187,7 @@ void NeuralRigProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (numSamples == 0 || numOutputChannels == 0 || numSamples > monoBuffer.getNumSamples())
         return;
 
-    // Pick up any capture the loader thread has published. Never allocates.
-    auto* model = modelSlot.acquire();
-
-    refreshGainsFor(model);
+    refreshGains();
 
     // --- Fold to mono -------------------------------------------------------
     // The rig is mono end to end; a stereo source is summed rather than run
@@ -191,9 +224,10 @@ void NeuralRigProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     gate.process(mono, numSamples);
     gateReduction.store(gate.gainReductionDb(), std::memory_order_relaxed);
 
-    // --- Capture ------------------------------------------------------------
-    if (model != nullptr)
-        model->process(mono, numSamples);
+    // --- Capture chain ------------------------------------------------------
+    // Picks up anything the loader threads published and applies any pending
+    // reorder. Never allocates.
+    chain.process(mono, numSamples, readSlotSettings());
 
     // --- Tone stack ---------------------------------------------------------
     if (handles.eqEnabled->load(std::memory_order_relaxed) > 0.5f)
@@ -227,12 +261,12 @@ void NeuralRigProcessor::timerCallback()
 {
     // Destroy anything the audio thread handed back. Freeing a network's
     // weights is unbounded work and must never happen mid-block.
-    modelSlot.collectRetired();
+    chain.collectRetired();
 }
 
-void NeuralRigProcessor::publishLatencyFor(const dsp::NamModel* model)
+void NeuralRigProcessor::publishLatency()
 {
-    const auto latency = model != nullptr ? model->latencySamples() : 0;
+    const auto latency = chain.latencySamples();
 
     if (latency != reportedLatency)
     {
@@ -241,14 +275,17 @@ void NeuralRigProcessor::publishLatencyFor(const dsp::NamModel* model)
     }
 }
 
-void NeuralRigProcessor::loadModel(const juce::File& file)
+void NeuralRigProcessor::loadModel(int slot, const juce::File& file)
 {
+    if (slot < 0 || slot >= params::numSlots)
+        return;
+
     // Not named sampleRate/blockSize: juce::AudioProcessor has members by
     // those names, and shadowing them is an error under our warning settings.
     const auto preparedRate = currentSampleRate > 0.0 ? currentSampleRate : 48000.0;
     const auto preparedBlock = currentBlockSize > 0 ? currentBlockSize : 512;
 
-    loaderPool.addJob([this, file, preparedRate, preparedBlock] {
+    loaderPool.addJob([this, slot, file, preparedRate, preparedBlock] {
         juce::String error;
         auto model = dsp::NamModel::loadFromFile(file, error);
 
@@ -264,46 +301,70 @@ void NeuralRigProcessor::loadModel(const juce::File& file)
 
         {
             const juce::ScopedLock lock(modelInfoLock);
-            modelName = name;
-            loadError = error;
+            slotNames[static_cast<size_t>(slot)] = name;
+            slotErrors[static_cast<size_t>(slot)] = error;
         }
 
         if (model != nullptr)
-            modelSlot.stage(std::move(model));
+            chain.stage(slot, std::move(model));
 
         modelGeneration.fetch_add(1, std::memory_order_relaxed);
 
-        juce::MessageManager::callAsync([this] {
-            if (auto* staged = modelSlot.current())
-                publishLatencyFor(staged);
-        });
+        // Latency can only be republished once the audio thread has actually
+        // picked the capture up, so defer to the message thread's next turn.
+        juce::MessageManager::callAsync([this] { publishLatency(); });
     });
 }
 
-void NeuralRigProcessor::clearModel()
+void NeuralRigProcessor::clearModel(int slot)
 {
-    modelSlot.requestClear();
+    if (slot < 0 || slot >= params::numSlots)
+        return;
+
+    chain.clear(slot);
 
     {
         const juce::ScopedLock lock(modelInfoLock);
-        modelName.clear();
-        loadError.clear();
+        slotNames[static_cast<size_t>(slot)].clear();
+        slotErrors[static_cast<size_t>(slot)].clear();
     }
 
     modelGeneration.fetch_add(1, std::memory_order_relaxed);
-    publishLatencyFor(nullptr);
+    publishLatency();
 }
 
-juce::String NeuralRigProcessor::loadedModelName() const
+void NeuralRigProcessor::swapSlots(int firstSlot, int secondSlot)
 {
-    const juce::ScopedLock lock(modelInfoLock);
-    return modelName;
+    if (firstSlot < 0 || firstSlot >= params::numSlots || secondSlot < 0 || secondSlot >= params::numSlots)
+        return;
+
+    chain.requestSwap(firstSlot, secondSlot);
+
+    {
+        const juce::ScopedLock lock(modelInfoLock);
+        std::swap(slotNames[static_cast<size_t>(firstSlot)], slotNames[static_cast<size_t>(secondSlot)]);
+        std::swap(slotErrors[static_cast<size_t>(firstSlot)], slotErrors[static_cast<size_t>(secondSlot)]);
+    }
+
+    modelGeneration.fetch_add(1, std::memory_order_relaxed);
 }
 
-juce::String NeuralRigProcessor::lastLoadError() const
+juce::String NeuralRigProcessor::loadedModelName(int slot) const
 {
+    if (slot < 0 || slot >= params::numSlots)
+        return {};
+
     const juce::ScopedLock lock(modelInfoLock);
-    return loadError;
+    return slotNames[static_cast<size_t>(slot)];
+}
+
+juce::String NeuralRigProcessor::lastLoadError(int slot) const
+{
+    if (slot < 0 || slot >= params::numSlots)
+        return {};
+
+    const juce::ScopedLock lock(modelInfoLock);
+    return slotErrors[static_cast<size_t>(slot)];
 }
 
 juce::AudioProcessorEditor* NeuralRigProcessor::createEditor()
@@ -315,10 +376,15 @@ void NeuralRigProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto tree = apvts.copyState();
 
-    // Remember which capture was loaded so a reopened session comes back with
-    // the same amp rather than a clean signal.
-    if (auto* model = modelSlot.current())
-        tree.setProperty("modelPath", model->info().name, nullptr);
+    // Remember which captures were loaded so a reopened session comes back
+    // with the same rig rather than a clean signal.
+    {
+        const juce::ScopedLock lock(modelInfoLock);
+
+        for (int slot = 0; slot < params::numSlots; ++slot)
+            if (const auto& name = slotNames[static_cast<size_t>(slot)]; name.isNotEmpty())
+                tree.setProperty("slot" + juce::String(slot + 1) + "Name", name, nullptr);
+    }
 
     if (auto xml = tree.createXml())
         copyXmlToBinary(*xml, destData);

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <utility>
 
 #include "NamModel.h"
 
@@ -68,6 +69,14 @@ public:
     /** The capture currently in play without checking for a staged swap.
         Audio thread only. */
     NamModel* current() const noexcept { return active; }
+
+    /** Exchanges the playing captures of two slots. Audio thread only.
+
+        Reordering the rig has to happen here rather than on the message
+        thread: `active` is owned by the audio thread, and reaching in from
+        outside would race with a block in flight. Swapping two raw pointers
+        allocates nothing and frees nothing, so it is safe to do mid-stream. */
+    void swapActiveWith(ModelSlot& other) noexcept { std::swap(active, other.active); }
 
 private:
     // Published by the message thread, claimed by the audio thread.
