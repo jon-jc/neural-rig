@@ -34,6 +34,9 @@ inline constexpr auto presence = "presence";
 
 inline constexpr auto irEnabled = "ir_enabled";
 inline constexpr auto outputMode = "output_mode";
+
+inline constexpr auto calibrateInput = "calibrate_input";
+inline constexpr auto inputCalibrationLevel = "input_calibration_level";
 } // namespace id
 
 /** How the level of the loaded model is compensated on the way out.

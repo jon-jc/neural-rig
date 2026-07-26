@@ -57,10 +57,20 @@ private:
 
     // Not named `processor`: AudioProcessorEditor already has a member by that
     // name, and shadowing it trips -Wshadow-field on Clang.
+    void refreshModelDisplay();
+    void chooseModel();
+
     NeuralRigProcessor& audioProcessor;
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;
+
+    juce::TextButton loadButton { "LOAD CAPTURE" };
+    juce::TextButton clearButton { "CLEAR" };
+    juce::Label modelLabel;
+
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    int lastSeenModelGeneration = -1;
 
     LabelledKnob inputKnob;
     LabelledKnob outputKnob;
