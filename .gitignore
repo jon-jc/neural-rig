@@ -1,27 +1,44 @@
 # Build output
-build/
-build-*/
+build-win/
+build-mac/
+build-ios/
+build-web/
+*/build-win/
+*/build-mac/
 out/
-cmake-build-*/
-install/
+Release/
+Debug/
+x64/
+Win32/
 
-# CMake
-CMakeCache.txt
-CMakeFiles/
-CMakeUserPresets.json
-cmake_install.cmake
-compile_commands.json
-
-# IDE
+# Visual Studio
 .vs/
-.vscode/
-.idea/
 *.user
 *.suo
-*.sln.docstates
+*.sdf
+*.opensdf
+*.ncb
+*.aps
+ipch/
+*.VC.db
+*.VC.opendb
+
+# Xcode
 DerivedData/
 *.xcuserdatad/
+xcuserdata/
 *.xcworkspace/xcuserdata/
+
+# iPlug2 fetches these into the submodule; they are not ours to track
+iPlug2/Dependencies/Build/
+iPlug2/Dependencies/IPlug/VST3_SDK/
+iPlug2/Dependencies/IPlug/VST2_SDK/
+iPlug2/Dependencies/IPlug/AAX_SDK/
+iPlug2/Dependencies/IPlug/WAM_SDK/
+iPlug2/Dependencies/IPlug/WAM_AWP/
+iPlug2/Dependencies/IPlug/RTAudio/
+iPlug2/Dependencies/IPlug/RTMidi/
+iPlug2/Dependencies/IPlug/REAPER_SDK/
 
 # OS
 .DS_Store
@@ -35,9 +52,9 @@ CLAUDE.md
 # Local secrets - never commit
 .env
 .env.local
-secrets.cmake
 **/LocalConfig.h
 
 # Downloaded model cache used during manual testing
 /models-cache/
 *.nam.download
+build.log
