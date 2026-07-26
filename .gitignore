@@ -1,0 +1,43 @@
+# Build output
+build/
+build-*/
+out/
+cmake-build-*/
+install/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake_install.cmake
+compile_commands.json
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln.docstates
+DerivedData/
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local tooling / assistant config (not part of the project)
+CLAUDE.md
+.claude/
+
+# Local secrets - never commit
+.env
+.env.local
+secrets.cmake
+**/LocalConfig.h
+
+# Downloaded model cache used during manual testing
+/models-cache/
+*.nam.download
