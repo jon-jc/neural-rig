@@ -1,6 +1,6 @@
 # IPLUG2_ROOT should point to the top level IPLUG2 folder from the project folder
 # By default, that is three directories up from /Examples/NeuralRig/config
-IPLUG2_ROOT = ..\..\iPlug2
+IPLUG2_ROOT = ../../iPlug2
 
 include ../../common-web.mk
 
