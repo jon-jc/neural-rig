@@ -10,6 +10,10 @@
 
 #include "Colors.h"
 #include "ToneStack.h"
+#include "net/BrowserController.h"
+
+#include <mutex>
+#include <utility>
 
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
@@ -90,6 +94,7 @@ enum ECtrlTags
   kCtrlTagSlimmableIcon,
   kCtrlTagSlimOverlayBackdrop,
   kCtrlTagSlimKnob,
+  kCtrlTagT3KBrowser,
   kNumCtrlTags
 };
 
@@ -399,6 +404,17 @@ private:
   WDL_String mIRPath;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
+
+  // TONE3000 browsing. The controller owns all the threading; the plugin only
+  // polls it from OnIdle.
+  nr::net::BrowserController mBrowser;
+
+  // Captures the browser has downloaded, waiting to be staged. The download
+  // callback fires on a worker thread, and staging a model touches state the
+  // audio thread reads, so the path is parked here and picked up on the message
+  // thread in OnIdle instead.
+  std::mutex mPendingLoadMutex;
+  std::vector<std::pair<int, std::string>> mPendingLoads;
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
