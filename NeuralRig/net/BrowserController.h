@@ -94,6 +94,29 @@ public:
   using LoadCallback = std::function<void(bool success, std::string pathOrError)>;
   void DownloadRow(int rowIndex, LoadCallback onComplete);
 
+  /// The URL an embedded browser should load to let the user pick a tone.
+  std::string BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const;
+
+  /// Waits for TONE3000 to redirect to the loopback listener with a chosen
+  /// tone, then downloads it. Used by the embedded browser: the user does the
+  /// browsing on tone3000.com itself and this picks up the result.
+  void AwaitToneSelection(LoopbackServer& loopback,
+                          const PkcePair& pkce,
+                          const std::string& redirectUri,
+                          int timeoutMs,
+                          LoadCallback onComplete);
+
+  /// Downloads a tone by id into the cache. Blocking; used by the above.
+  bool DownloadTone(int toneId, const std::string& title, std::string& pathOrError);
+
+  /// Handles a single redirect from the embedded browser. Called in a loop by
+  /// AwaitToneSelection so one pick is not the end of the session.
+  void HandleOneSelection(LoopbackServer& loopback,
+                          const PkcePair& pkce,
+                          const std::string& redirectUri,
+                          int timeoutMs,
+                          const LoadCallback& onComplete);
+
   /// Copies the current state for rendering.
   Snapshot GetSnapshot() const;
 

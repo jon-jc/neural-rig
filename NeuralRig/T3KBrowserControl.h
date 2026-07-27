@@ -2,35 +2,35 @@
 
 #include <algorithm>
 #include <string>
-#include <vector>
 
 #include "IControls.h"
+#include "IWebViewControl.h"
 
 #include "Colors.h"
 #include "net/BrowserController.h"
+#include "net/LoopbackServer.h"
+#include "net/Tone3000Client.h"
 
 using namespace iplug;
 using namespace igraphics;
 
 /**
-    Full-window modal for browsing TONE3000 captures.
+    TONE3000, embedded.
 
-    Draws its own opaque backdrop. IContainerBase paints nothing by default, so
-    without this the panel is transparent and its children float over whatever
-    is behind them.
+    A real browser inside the plugin rather than a list widget built on top of
+    the API. The user gets tone3000.com itself -- artwork, demos, tags, the
+    search they already know -- and picking a tone hands the id straight back to
+    us to download and load. That is the flow TONE3000 designed the
+    `prompt=select_tone` OAuth mode for.
 
-    Layout is a paged list rather than a scrolling one: IGraphics has no scroll
-    view, and the API is paged anyway, so prev/next maps straight onto `page`.
-
-    Owns no networking. It reads a snapshot from BrowserController and calls
-    back into it, which keeps threading in one place and leaves this file about
-    drawing.
+    Windows uses WebView2 (Edge Chromium), macOS WKWebView. The WebView2
+    *runtime* must be present, which it is on Windows 11 and anywhere Edge is
+    installed; the loader is linked statically so nothing ships beside the
+    plugin.
 */
 class T3KBrowserPageControl : public IContainerBase
 {
 public:
-  static constexpr int kRowsPerPage = 7;
-
   using LoadIntoSlotFunc = std::function<void(int slot, const char* filePath)>;
 
   T3KBrowserPageControl(const IRECT& bounds, nr::net::BrowserController& controller, const IVStyle& style)
@@ -39,25 +39,22 @@ public:
   , mStyle(style)
   {
     mIgnoreMouse = false;
-    mHide = true;
   }
 
   void SetLoadIntoSlotFunc(LoadIntoSlotFunc func) { mLoadIntoSlot = std::move(func); }
 
-  /// Preselects the slot a picked capture lands in, so opening the browser from
-  /// a slot's globe fills that slot.
   void SetTargetSlot(int slot)
   {
     mTargetSlot = std::max(0, std::min(slot, 3));
 
     if (mSlotButton != nullptr)
-      RefreshChrome();
+      mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
   }
 
-  /// Opaque backdrop. Without it the modal is see-through and unreadable.
+  /// Fully opaque. A translucent modal over a busy amp panel is unreadable.
   void Draw(IGraphics& g) override
   {
-    g.FillRect(PluginColors::NAM_1.WithOpacity(0.97f), mRECT);
+    g.FillRect(PluginColors::NAM_1, mRECT);
     g.FillRect(PluginColors::NAM_2, mRECT.GetFromTop(kHeaderHeight));
     g.DrawLine(PluginColors::NAM_THEMECOLOR, mRECT.L, mRECT.T + kHeaderHeight, mRECT.R,
                mRECT.T + kHeaderHeight, nullptr, 2.f);
@@ -69,7 +66,7 @@ public:
   {
     if (key.VK == kVK_ESCAPE)
     {
-      Hide(true);
+      Close();
       return true;
     }
 
@@ -78,237 +75,140 @@ public:
 
   void OnAttached() override
   {
-    const auto all = GetRECT();
+    auto remaining = GetRECT();
 
-    // Every rect is carved off a running remainder, so sections cannot overlap
-    // however the window is sized.
-    auto remaining = all;
-
-    // --- Header -------------------------------------------------------------
     auto header = remaining.GetFromTop(kHeaderHeight);
     remaining = remaining.GetReducedFromTop(kHeaderHeight);
 
-    const auto headerPad = header.GetPadded(-kPad);
-    AddChildControl(new ITextControl(headerPad.GetFromLeft(240.f), "TONE3000",
-                                     IText(24.f, EAlign::Near, COLOR_WHITE)));
+    const auto headerPad = header.GetPadded(-12.f);
 
-    auto headerButtons = headerPad.GetFromRight(260.f);
-    AddChildControl(new IVButtonControl(
-      headerButtons.GetFromRight(90.f), [this](IControl*) { Hide(true); }, "CLOSE", mStyle));
+    AddChildControl(new ITextControl(headerPad.GetFromLeft(200.f), "TONE3000",
+                                     IText(22.f, EAlign::Near, COLOR_WHITE)));
 
-    mConnectButton = new IVButtonControl(
-      headerButtons.GetFromLeft(150.f),
-      [this](IControl*) {
-        if (mController.GetSnapshot().status == nr::net::BrowserController::Status::SignedOut)
-          mController.SignIn();
-        else
-          mController.SignOut();
-      },
-      "CONNECT", mStyle);
-    AddChildControl(mConnectButton);
-
-    remaining = remaining.GetPadded(-kPad);
-
-    // --- Search row ---------------------------------------------------------
-    auto searchRow = remaining.GetFromTop(kRowHeight);
-    remaining = remaining.GetReducedFromTop(kRowHeight + kPad);
-
-    mSearchButton = new IVButtonControl(
-      searchRow.GetReducedFromRight(340.f),
-      [this](IControl* pCaller) {
-        GetUI()->CreateTextEntry(*pCaller, IText(15.f), pCaller->GetRECT(), mSearchText.c_str());
-      },
-      "Search captures...", mStyle);
-    AddChildControl(mSearchButton);
-
-    auto searchControls = searchRow.GetFromRight(330.f);
-    mGearButton = new IVButtonControl(
-      searchControls.GetFromLeft(105.f),
-      [this](IControl*) {
-        mGearIndex = (mGearIndex + 1) % static_cast<int>(mGearChoices.size());
-        RefreshChrome();
-        RunSearch(1);
-      },
-      "All gear", mStyle);
-    AddChildControl(mGearButton);
-
-    mSortButton = new IVButtonControl(
-      searchControls.GetFromLeft(220.f).GetFromRight(105.f),
-      [this](IControl*) {
-        mSortIndex = (mSortIndex + 1) % static_cast<int>(mSortChoices.size());
-        RefreshChrome();
-        RunSearch(1);
-      },
-      "Best match", mStyle);
-    AddChildControl(mSortButton);
-
-    AddChildControl(new IVButtonControl(
-      searchControls.GetFromRight(100.f), [this](IControl*) { RunSearch(1); }, "SEARCH", mStyle));
-
-    // --- Status -------------------------------------------------------------
-    auto statusRow = remaining.GetFromTop(24.f);
-    remaining = remaining.GetReducedFromTop(24.f + kPad);
-
-    mStatusLabel = new ITextControl(statusRow, "", IText(14.f, EAlign::Near, PluginColors::HELP_TEXT));
+    mStatusLabel = new ITextControl(headerPad.GetReducedFromLeft(210.f).GetReducedFromRight(330.f), "",
+                                    IText(13.f, EAlign::Near, PluginColors::HELP_TEXT));
     AddChildControl(mStatusLabel);
 
-    // --- Footer, carved off the bottom before the list takes the rest -------
-    auto footer = remaining.GetFromBottom(kRowHeight);
-    remaining = remaining.GetReducedFromBottom(kRowHeight + kPad);
+    auto buttons = headerPad.GetFromRight(320.f);
 
     AddChildControl(new IVButtonControl(
-      footer.GetFromLeft(90.f), [this](IControl*) { RunSearch(mCurrentPage - 1); }, "< PREV", mStyle));
-    AddChildControl(new IVButtonControl(
-      footer.GetFromLeft(190.f).GetFromRight(90.f), [this](IControl*) { RunSearch(mCurrentPage + 1); },
-      "NEXT >", mStyle));
+      buttons.GetFromLeft(70.f), [this](IControl*) { NavigateHome(); }, "HOME", mStyle));
 
-    mPageLabel = new ITextControl(footer.GetReducedFromLeft(200.f).GetReducedFromRight(220.f), "",
-                                  IText(14.f, EAlign::Center, PluginColors::HELP_TEXT));
-    AddChildControl(mPageLabel);
+    AddChildControl(new ITextControl(buttons.GetFromLeft(150.f).GetFromRight(72.f), "Load into",
+                                     IText(13.f, EAlign::Far, PluginColors::HELP_TEXT)));
 
-    auto slotPicker = footer.GetFromRight(210.f);
-    AddChildControl(new ITextControl(slotPicker.GetFromLeft(90.f), "Load into",
-                                     IText(14.f, EAlign::Far, PluginColors::HELP_TEXT)));
     mSlotButton = new IVButtonControl(
-      slotPicker.GetFromRight(110.f),
+      buttons.GetFromLeft(250.f).GetFromRight(94.f),
       [this](IControl*) {
         mTargetSlot = (mTargetSlot + 1) % 4;
-        RefreshChrome();
+        mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
       },
       "Slot 1", mStyle);
     AddChildControl(mSlotButton);
 
-    // --- Results ------------------------------------------------------------
-    const auto rowPitch = remaining.H() / static_cast<float>(kRowsPerPage);
+    AddChildControl(new IVButtonControl(
+      buttons.GetFromRight(64.f), [this](IControl*) { NavigateHome(); }, "RELOAD", mStyle));
 
-    for (int i = 0; i < kRowsPerPage; i++)
-    {
-      const auto rowBounds =
-        remaining.GetFromTop(rowPitch).GetVShifted(rowPitch * static_cast<float>(i)).GetPadded(-2.f);
+    // The browser fills everything below the header.
+    mWebView = new IWebViewControl(
+      remaining, true, [this](IWebViewControl* pCaller) { OnWebViewReady(pCaller); },
+      [this](IWebViewControl*, const char* json) { (void)json; });
 
-      auto* row = new IVButtonControl(
-        rowBounds, [this, i](IControl*) { PickRow(i); }, "", mStyle, true, false, EVShape::Rectangle);
-
-      mRowButtons.push_back(row);
-      AddChildControl(row);
-    }
-
-    RefreshChrome();
-    Refresh();
+    AddChildControl(mWebView);
   }
 
-  void OnTextEntryCompletion(const char* str, int valIdx) override
+  /// Starts the loopback listener and points the browser at TONE3000's own
+  /// selection flow, so the user browses the real site.
+  void Open()
   {
-    if (str != nullptr)
+    mRedirectUri = mLoopback.Start();
+
+    if (mRedirectUri.empty())
     {
-      mSearchText = str;
-      RefreshChrome();
-      RunSearch(1);
+      SetStatus("Could not open a local port for sign-in");
+      return;
     }
+
+    mPkce = nr::net::CreatePkcePair();
+    SetStatus("Browse TONE3000 and choose a capture");
+
+    if (mWebView != nullptr)
+      mWebView->LoadURL(SelectToneUrl().c_str());
+
+    StartWaitingForSelection();
   }
 
-  /// Pulls the latest state from the controller. Driven by the plugin's idle
-  /// callback, and only when the controller reports a change.
+  void Close()
+  {
+    mLoopback.Stop();
+    Hide(true);
+  }
+
+  /// Polled from the plugin's idle callback so status text tracks the
+  /// controller without the worker touching IGraphics.
   void Refresh()
   {
     const auto snapshot = mController.GetSnapshot();
-    mCurrentPage = snapshot.page;
 
-    const bool signedOut = snapshot.status == nr::net::BrowserController::Status::SignedOut;
-    mConnectButton->SetLabelStr(signedOut ? "CONNECT" : "SIGN OUT");
-    mStatusLabel->SetStr(snapshot.message.c_str());
-
-    for (int i = 0; i < kRowsPerPage; i++)
-    {
-      auto* row = mRowButtons[static_cast<size_t>(i)];
-
-      if (i < static_cast<int>(snapshot.rows.size()))
-      {
-        const auto& data = snapshot.rows[static_cast<size_t>(i)];
-
-        std::string label = data.title;
-        if (!data.author.empty())
-          label += "   \xE2\x80\xA2   " + data.author;
-        if (!data.gear.empty())
-          label += "   \xE2\x80\xA2   " + data.gear;
-        if (data.downloads > 0)
-          label += "   \xE2\x80\xA2   " + std::to_string(data.downloads) + " downloads";
-
-        row->SetLabelStr(label.c_str());
-        row->SetDisabled(false);
-        row->Hide(false);
-      }
-      else
-      {
-        // Hidden rather than shown empty, so a short page does not leave a
-        // column of blank buttons.
-        row->Hide(true);
-      }
-    }
-
-    if (snapshot.totalPages > 0)
-      mPageLabel->SetStr(("Page " + std::to_string(snapshot.page) + " / " + std::to_string(snapshot.totalPages)
-                          + "   \xE2\x80\xA2   " + std::to_string(snapshot.total) + " captures")
-                           .c_str());
-    else
-      mPageLabel->SetStr("");
+    if (!snapshot.message.empty())
+      mStatusLabel->SetStr(snapshot.message.c_str());
 
     SetDirty(false);
   }
 
 private:
-  static constexpr float kHeaderHeight = 56.f;
-  static constexpr float kRowHeight = 34.f;
-  static constexpr float kPad = 14.f;
+  static constexpr float kHeaderHeight = 52.f;
+  static constexpr int kSelectionTimeoutMs = 600000; // ten minutes of browsing
 
-  void RefreshChrome()
+  void OnWebViewReady(IWebViewControl* pCaller)
   {
-    mGearButton->SetLabelStr(mGearLabels[static_cast<size_t>(mGearIndex)]);
-    mSortButton->SetLabelStr(mSortLabels[static_cast<size_t>(mSortIndex)]);
-    mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
-    mSearchButton->SetLabelStr(mSearchText.empty() ? "Search captures..." : mSearchText.c_str());
+    if (!mRedirectUri.empty())
+      pCaller->LoadURL(SelectToneUrl().c_str());
   }
 
-  void RunSearch(int page)
+  std::string SelectToneUrl() const
   {
-    mController.Search(mSearchText, mGearChoices[static_cast<size_t>(mGearIndex)],
-                       mSortChoices[static_cast<size_t>(mSortIndex)], 0, std::max(1, page));
+    // prompt=select_tone puts TONE3000 into its "pick one and hand it back"
+    // mode, which is exactly what an in-plugin browser wants.
+    return mController.BuildSelectToneUrl(mPkce, mRedirectUri);
   }
 
-  void PickRow(int rowIndex)
+  void NavigateHome()
+  {
+    if (mWebView != nullptr)
+      mWebView->LoadURL(SelectToneUrl().c_str());
+  }
+
+  void SetStatus(const std::string& text)
+  {
+    if (mStatusLabel != nullptr)
+      mStatusLabel->SetStr(text.c_str());
+  }
+
+  /// Waits for TONE3000 to redirect to the loopback listener with a tone id,
+  /// then downloads that tone into the chosen slot.
+  void StartWaitingForSelection()
   {
     const int slot = mTargetSlot;
 
-    mController.DownloadRow(rowIndex, [this, slot](bool success, std::string pathOrError) {
-      // Worker thread. The host marshals to the message thread before touching
-      // the DSP.
-      if (success && mLoadIntoSlot)
-        mLoadIntoSlot(slot, pathOrError.c_str());
-    });
+    mController.AwaitToneSelection(mLoopback, mPkce, mRedirectUri, kSelectionTimeoutMs,
+                                   [this, slot](bool success, std::string pathOrError) {
+                                     if (success && mLoadIntoSlot)
+                                       mLoadIntoSlot(slot, pathOrError.c_str());
+                                   });
   }
 
   nr::net::BrowserController& mController;
   IVStyle mStyle;
   LoadIntoSlotFunc mLoadIntoSlot;
 
-  IVButtonControl* mConnectButton = nullptr;
-  IVButtonControl* mSearchButton = nullptr;
-  IVButtonControl* mGearButton = nullptr;
-  IVButtonControl* mSortButton = nullptr;
+  IWebViewControl* mWebView = nullptr;
   IVButtonControl* mSlotButton = nullptr;
   ITextControl* mStatusLabel = nullptr;
-  ITextControl* mPageLabel = nullptr;
-  std::vector<IVButtonControl*> mRowButtons;
 
-  std::string mSearchText;
-  int mCurrentPage = 1;
+  nr::net::LoopbackServer mLoopback;
+  nr::net::PkcePair mPkce;
+  std::string mRedirectUri;
+
   int mTargetSlot = 0;
-
-  int mGearIndex = 0;
-  const std::vector<std::string> mGearChoices{"", "amp", "full-rig", "pedal", "outboard"};
-  const std::vector<const char*> mGearLabels{"All gear", "Amp", "Full rig", "Pedal", "Outboard"};
-
-  int mSortIndex = 0;
-  const std::vector<std::string> mSortChoices{"best-match", "trending", "newest", "downloads-all-time"};
-  const std::vector<const char*> mSortLabels{"Best match", "Trending", "Newest", "Downloads"};
 };

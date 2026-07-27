@@ -298,6 +298,167 @@ void BrowserController::GoToPage(int page)
   Search(query.text, gear, query.sort, query.architecture, page);
 }
 
+std::string BrowserController::BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const
+{
+  return mClient.BuildSelectToneUrl(pkce, redirectUri);
+}
+
+void BrowserController::AwaitToneSelection(LoopbackServer& loopback,
+                                           const PkcePair& pkce,
+                                           const std::string& redirectUri,
+                                           int timeoutMs,
+                                           LoadCallback onComplete)
+{
+  RunAsync([this, &loopback, pkce, redirectUri, timeoutMs, onComplete = std::move(onComplete)] {
+    // Keep listening for as long as the browser panel is open. The panel is
+    // permanent now, so one selection must not be the end of it -- picking a
+    // second capture has to work without reopening anything.
+    while (loopback.IsRunning())
+    {
+      HandleOneSelection(loopback, pkce, redirectUri, timeoutMs, onComplete);
+    }
+  });
+}
+
+void BrowserController::HandleOneSelection(LoopbackServer& loopback,
+                                           const PkcePair& pkce,
+                                           const std::string& redirectUri,
+                                           int timeoutMs,
+                                           const LoadCallback& onComplete)
+{
+  {
+    const auto parameters = loopback.WaitForRedirect(timeoutMs);
+
+    if (parameters.empty())
+    {
+      // Timed out with nothing chosen, or the panel was closed underneath us.
+      return;
+    }
+
+    const auto errorIt = parameters.find("error");
+    if (errorIt != parameters.end())
+    {
+      // redirect_uri_mismatch is the one worth naming outright: it means the
+      // TONE3000 app has redirect URIs registered and the loopback address is
+      // not among them, which no amount of retrying will fix.
+      const bool mismatch = errorIt->second.find("redirect") != std::string::npos;
+
+      SetStatus(Status::Failed,
+                mismatch ? "TONE3000 rejected the loopback address. Clear the Allowed Redirect URIs "
+                           "in your TONE3000 app settings, or add " + redirectUri
+                         : "TONE3000 declined: " + errorIt->second);
+      return;
+    }
+
+    // Verify state before touching the code. Without this, anything able to
+    // reach the loopback port could feed us a code of its choosing.
+    const auto stateIt = parameters.find("state");
+    if (stateIt == parameters.end() || stateIt->second != pkce.state)
+    {
+      SetStatus(Status::Failed, "Selection failed a security check and was abandoned");
+      return;
+    }
+
+    // A code is present on first authorisation. On later selections, when the
+    // user is already signed in, TONE3000 may hand back only a tone_id -- in
+    // which case the saved session has to carry the request instead.
+    const auto codeIt = parameters.find("code");
+    if (codeIt != parameters.end() && !codeIt->second.empty())
+    {
+      SetStatus(Status::Working, "Signing in...");
+
+      std::string error;
+      if (!mClient.ExchangeCode(codeIt->second, pkce.verifier, redirectUri, error))
+      {
+        SetStatus(Status::Failed, "Sign-in failed: " + error);
+        return;
+      }
+    }
+
+    const auto toneIt = parameters.find("tone_id");
+    if (toneIt == parameters.end() || toneIt->second.empty())
+    {
+      SetStatus(Status::Idle, mClient.IsConnected() ? "Signed in. Pick a capture to load."
+                                                    : "Signed in, but no capture was chosen.");
+      return;
+    }
+
+    if (!mClient.IsConnected())
+    {
+      // Without a token the model endpoints are closed to us, and silently
+      // doing nothing is the worst possible answer here.
+      SetStatus(Status::Failed, "Chose a capture but no TONE3000 session; press HOME and sign in again.");
+
+      if (onComplete)
+        onComplete(false, "no session");
+
+      return;
+    }
+
+    const int toneId = std::atoi(toneIt->second.c_str());
+    SetStatus(Status::Working, "Fetching capture " + toneIt->second + "...");
+
+    std::string pathOrError;
+    const bool ok = DownloadTone(toneId, "tone-" + toneIt->second, pathOrError);
+
+    SetStatus(ok ? Status::Idle : Status::Failed,
+              ok ? "Loaded into the chain" : ("Download failed: " + pathOrError));
+
+    if (onComplete)
+      onComplete(ok, pathOrError);
+  }
+}
+
+bool BrowserController::DownloadTone(int toneId, const std::string& title, std::string& pathOrError)
+{
+  std::vector<Model> models;
+  std::string error;
+
+  if (!mClient.ListModels(toneId, models, error))
+  {
+    pathOrError = error;
+    return false;
+  }
+
+  if (models.empty())
+  {
+    pathOrError = "That tone has no downloadable models";
+    return false;
+  }
+
+  // Prefer the fullest size a tone offers; CPU is the user's to trade away with
+  // the slim control if they want it back.
+  const auto best = std::min_element(models.begin(), models.end(), [](const Model& a, const Model& b) {
+    return SizeRank(a.size) < SizeRank(b.size);
+  });
+
+  const auto directory = CacheDirectory();
+
+  if (directory.empty())
+  {
+    pathOrError = "Could not create the model cache directory";
+    return false;
+  }
+
+#ifdef _WIN32
+  const auto separator = "\\";
+#else
+  const auto separator = "/";
+#endif
+
+  const auto path =
+    directory + separator + SanitiseForFilename(title) + "-" + std::to_string(best->id) + ".nam";
+
+  if (!mClient.DownloadModel(*best, path, error))
+  {
+    pathOrError = error;
+    return false;
+  }
+
+  pathOrError = path;
+  return true;
+}
+
 void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
 {
   int toneId = 0;

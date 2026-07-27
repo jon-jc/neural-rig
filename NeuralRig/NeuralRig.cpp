@@ -103,6 +103,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
   }
 
+  // Pedal FX. Off by default: a capture should sound like the capture until
+  // the user asks for something on top of it.
+  GetParam(kDriveActive)->InitBool("DriveActive", false);
+  GetParam(kDriveAmount)->InitDouble("Drive", 3.0, 0.0, 10.0, 0.01);
+  GetParam(kDelayActive)->InitBool("DelayActive", false);
+  GetParam(kDelayTime)->InitDouble("Time", 350.0, 20.0, 1500.0, 1.0, "ms");
+  GetParam(kDelayMix)->InitDouble("Mix", 25.0, 0.0, 100.0, 0.1, "%");
+  GetParam(kReverbActive)->InitBool("ReverbActive", false);
+  GetParam(kReverbAmount)->InitDouble("Reverb", 25.0, 0.0, 100.0, 0.1, "%");
+
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -147,10 +157,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto b = pGraphics->GetBounds();
 
+    // The browser column is reserved first and nothing else may draw into it:
+    // a native web view sits above the IGraphics surface, so anything sharing
+    // its rectangle would simply be hidden.
+    const auto browserColumn = b.GetFromRight(NR_BROWSER_COLUMN_WIDTH);
+    const auto rigColumn = b.GetReducedFromRight(NR_BROWSER_COLUMN_WIDTH);
+
     // Every section is carved off a running remainder rather than positioned by
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
     // bottom here is reading the signal path.
-    auto remaining = b.GetPadded(-16.f);
+    auto remaining = rigColumn.GetPadded(-16.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
@@ -198,10 +214,28 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     // --- Cabinet ------------------------------------------------------------
     const auto cabinetGroup = remaining.GetFromTop(74.f);
-    remaining = remaining.GetReducedFromTop(74.f);
+    remaining = remaining.GetReducedFromTop(74.f + 10.f);
 
     const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
+
+    // --- Pedal FX -----------------------------------------------------------
+    // Post-amp, like a wet effects loop: drive belongs in front of a capture
+    // and these do not, so they sit after the cabinet where a real rig puts
+    // time-based effects.
+    const auto fxGroup = remaining;
+    const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
+    const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
+    const auto fxToggleRow = fxInner.GetFromBottom(30.f);
+
+    const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
+    const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
+    const auto delayMixKnobArea = fxKnobRow.GetGridCell(0, 2, 1, 4).GetMidHPadded(48.f);
+    const auto reverbKnobArea = fxKnobRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(48.f);
+
+    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(30.f);
+    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(30.f);
+    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(30.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -275,6 +309,20 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     pGraphics->AttachControl(new IVGroupControl(ampGroup, "AMP", 8.f, groupStyle));
     pGraphics->AttachControl(new IVGroupControl(chainGroup, "CAPTURE CHAIN", 8.f, groupStyle));
     pGraphics->AttachControl(new IVGroupControl(cabinetGroup, "CABINET", 8.f, groupStyle));
+    pGraphics->AttachControl(new IVGroupControl(fxGroup, "PEDAL FX", 8.f, groupStyle));
+
+    // Pedal FX
+    pGraphics->AttachControl(new NAMKnobControl(driveKnobArea, kDriveAmount, "Drive", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(delayKnobArea, kDelayTime, "Delay", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(delayMixKnobArea, kDelayMix, "Delay Mix", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(reverbKnobArea, kReverbAmount, "Reverb", style, knobBackgroundBitmap));
+
+    pGraphics->AttachControl(
+      new NAMSwitchControl(driveToggleArea, kDriveActive, "Drive", style, switchHandleBitmap));
+    pGraphics->AttachControl(
+      new NAMSwitchControl(delayToggleArea, kDelayActive, "Delay", style, switchHandleBitmap));
+    pGraphics->AttachControl(
+      new NAMSwitchControl(reverbToggleArea, kReverbActive, "Reverb", style, switchHandleBitmap));
 
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
@@ -288,12 +336,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // picking a capture fills the row the user clicked. Upstream sends the
       // user to a web page instead, which leaves them to download, unzip and
       // find the file by hand.
-      auto browseForSlot = [pGraphics, slot, this](IControl*) {
-        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
-        mBrowser.Begin();
-        page->SetTargetSlot(static_cast<int>(slot));
-        page->Refresh();
-        page->Hide(false);
+      // The browser is always on screen, so the globe just aims it at this
+      // slot: whatever is picked next lands in the row that was clicked.
+      auto browseForSlot = [pGraphics, slot](IControl*) {
+        pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)
+          ->As<T3KBrowserPageControl>()
+          ->SetTargetSlot(static_cast<int>(slot));
       };
 
       pGraphics->AttachControl(
@@ -367,7 +415,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     // TONE3000 browser, and the button that opens it.
     {
-      auto* browserPage = new T3KBrowserPageControl(b, mBrowser, style);
+      auto* browserPage = new T3KBrowserPageControl(browserColumn, mBrowser, style);
 
       browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
         // Called from a worker thread. Park the path and let OnIdle stage it on
@@ -376,10 +424,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         mPendingLoads.emplace_back(slot, std::string(filePath));
       });
 
-      // No separate "browse" button: each slot's globe opens this page aimed at
-      // that slot, which is where a user looking to fill a slot actually
-      // reaches for.
-      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser)->Hide(true);
+      // Permanent, in its own column. A native web view draws above everything
+      // IGraphics paints, so as a modal it covered the whole plugin; given a
+      // column nothing else uses, that stops being a problem and the catalogue
+      // is simply always there.
+      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser);
+      browserPage->Open();
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -508,6 +558,31 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
   sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
+
+  // Pedal FX, after the cabinet and the DC blocker. Order within the loop is
+  // drive into delay into reverb, which is how the pedals would be cabled.
+  {
+    auto* wet = hpfPointers[0];
+
+    if (GetParam(kDriveActive)->Bool())
+    {
+      mDrive.SetAmount(GetParam(kDriveAmount)->Value());
+      mDrive.Process(wet, nFrames);
+    }
+
+    if (GetParam(kDelayActive)->Bool())
+    {
+      mDelay.SetTimeMs(GetParam(kDelayTime)->Value());
+      mDelay.SetMix(GetParam(kDelayMix)->Value() * 0.01);
+      mDelay.Process(wet, nFrames);
+    }
+
+    if (GetParam(kReverbActive)->Bool())
+    {
+      mReverb.SetMix(GetParam(kReverbAmount)->Value() * 0.01);
+      mReverb.Process(wet, nFrames);
+    }
+  }
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state
@@ -534,6 +609,12 @@ void NeuralRig::OnReset()
   SetTailSize(tailCycles * (int)(sampleRate / kDCBlockerFrequency));
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
+
+  // FX buffers are sized here, off the audio thread, so processing never
+  // allocates. 1500 ms matches the delay parameter's maximum.
+  mDelay.Prepare(sampleRate, 1500.0);
+  mReverb.Prepare(sampleRate);
+  mReverb.Reset();
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);

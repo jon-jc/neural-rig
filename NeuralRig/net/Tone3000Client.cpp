@@ -213,6 +213,17 @@ std::string Tone3000Client::BuildAuthorizeUrl(const PkcePair& pkce, const std::s
   return url.str();
 }
 
+std::string Tone3000Client::BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const
+{
+  // menubar=true gives the embedded view TONE3000's own navigation, without
+  // which the user is stranded on whatever page they land on -- there is no
+  // browser chrome around it to go back with.
+  //
+  // On success TONE3000 redirects with code, state and tone_id. The code is
+  // always present, so the exchange path below is not conditional on luck.
+  return BuildAuthorizeUrl(pkce, redirectUri) + "&prompt=select_tone&menubar=true";
+}
+
 bool Tone3000Client::ExchangeCode(const std::string& code,
                                   const std::string& verifier,
                                   const std::string& redirectUri,

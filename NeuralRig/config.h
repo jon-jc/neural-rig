@@ -30,11 +30,15 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-// Wide, like an amp sim rather than a utility panel. Upstream's 600x400
-// background photo is not used: it cannot stretch to this without distorting,
-// and the sections are drawn instead, which is what lets the layout breathe.
-#define PLUG_WIDTH 900
-#define PLUG_HEIGHT 680
+// Two columns: the rig on the left, TONE3000 on the right.
+//
+// The browser is a native OS view (WebView2 / WKWebView) and always draws above
+// anything IGraphics paints -- the platform gives no way around that. So it
+// gets a permanent column of its own rather than being a modal, which is what
+// made it cover the whole plugin.
+#define PLUG_WIDTH 1180
+#define PLUG_HEIGHT 780
+#define NR_BROWSER_COLUMN_WIDTH 520.f
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0

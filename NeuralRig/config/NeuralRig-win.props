@@ -19,11 +19,14 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir)dsp;$(IPLUG2_ROOT)\..\eigen;$(EXTRA_INC_PATHS);$(IPLUG_INC_PATHS);$(IGRAPHICS_INC_PATHS);$(GLAD_GL2_PATHS);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)dsp;$(IPLUG2_ROOT)\..\eigen;$(IPLUG2_ROOT)\..\Dependencies\WebView2\webview2-sdk\build\native\include;$(IPLUG2_ROOT)\..\Dependencies\WebView2\wil-sdk\include;$(IPLUG2_ROOT)\IPlug\Extras\WebView;$(EXTRA_INC_PATHS);$(IPLUG_INC_PATHS);$(IGRAPHICS_INC_PATHS);$(GLAD_GL2_PATHS);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>$(EXTRA_ALL_DEFS);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>wininet.lib;comctl32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- WebView2LoaderStatic avoids shipping WebView2Loader.dll beside the
+           plugin; the WebView2 *runtime* still has to be present, which it is
+           on Windows 11 and anywhere Edge is installed. -->
+      <AdditionalDependencies>wininet.lib;comctl32.lib;Shlwapi.lib;version.lib;$(IPLUG2_ROOT)\..\Dependencies\WebView2\webview2-sdk\build\native\x64\WebView2LoaderStatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ProgramDatabaseFile>$(PDB_FILE)</ProgramDatabaseFile>
     </Link>
     <PostBuildEvent>
