@@ -919,7 +919,11 @@ void NeuralRig::OnParamChangeUI(int paramIdx, EParamSource source)
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
         break;
-      case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+      // kIRToggle deliberately has no UI case. It used to grey out the IR file
+      // picker, and that control is gone -- GetControlWithTag returned null and
+      // this dereferenced it, which crashed the plugin on startup as soon as
+      // the parameter was initialised. The toggle still works: ProcessBlock
+      // reads the parameter directly.
       default: break;
     }
   }
