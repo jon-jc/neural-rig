@@ -163,9 +163,23 @@ public:
       [this](IWebViewControl*, const char* json) { (void)json; });
 
     AddChildControl(mWebView);
+
+    // Children are constructed visible regardless of the container's state, so
+    // apply the current one now that they exist.
+    Hide(mHide);
   }
 
   void OnRescale() override { PlaceWebView(); }
+
+  /// Hiding a container does not hide what is inside it: IContainerBase::Hide
+  /// sets its own flag and stops there, so the children keep drawing wherever
+  /// they happen to sit. Left alone, the title and the HOME/Slot/CLOSE buttons
+  /// paint over the amp knobs while the panel is supposedly closed.
+  void Hide(bool hide) override
+  {
+    IContainerBase::Hide(hide);
+    ForAllChildrenFunc([hide](int /*childIdx*/, IControl* pChild) { pChild->Hide(hide); });
+  }
 
   /// Shows the panel and points it at TONE3000's selection flow.
   void OpenBrowser()

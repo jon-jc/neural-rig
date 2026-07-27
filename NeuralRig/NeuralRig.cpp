@@ -427,7 +427,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       gearSVG));
 
     pGraphics
-      ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
+      // Centred at roughly the size upstream laid it out for. Its contents are
+      // positioned relative to a title area at the top of its own bounds, so
+      // handing it the whole 1120x880 window scatters them across the panel.
+      ->AttachControl(new NAMSettingsPageControl(b.GetCentredInside(640.f, 470.f), backgroundBitmap,
+                                                 inputLevelBackgroundBitmap, switchHandleBitmap,
                                                  crossSVG, style, radioButtonStyle),
                       kCtrlTagSettingsBox)
       ->Hide(true);
