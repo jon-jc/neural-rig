@@ -39,7 +39,7 @@ struct Tone
   int id = 0;
   std::string title;
   std::string description;
-  std::string gear;    ///< amp, full-rig, pedal, outboard, ir
+  std::string gear;    ///< amp, amp-cab, pedal, outboard, cab, space, experimental
   std::string format;  ///< nam, ir, aida-x, ...
   std::string licence; ///< t3k, cc-by, ...
   std::string author;
@@ -47,9 +47,24 @@ struct Tone
   std::vector<std::string> makes;
   std::vector<std::string> tags;
   std::vector<std::string> sizes;
+  std::vector<std::string> images; ///< artwork URLs, first is the card thumbnail
   int modelsCount = 0;
   int downloadsCount = 0;
   int favouritesCount = 0;
+
+  /// Only ever true from the favourites listing or immediately after the user
+  /// stars something. Search results carry no per-user state, so a false here
+  /// means "not known to be favourited" rather than "definitely not".
+  bool isFavourited = false;
+};
+
+/// The signed-in account, for the browser's identity strip.
+struct User
+{
+  int id = 0;
+  std::string username;
+  std::string avatarUrl;
+  std::string url;
 };
 
 /// A downloadable model file belonging to a tone.
@@ -78,10 +93,24 @@ struct SearchQuery
   std::string text;
   std::vector<std::string> gears; ///< empty means every kind of gear
   std::vector<std::string> sizes; ///< empty means every size
+  std::string format;             ///< nam, ir, aida-x, ...; empty means any
   std::string sort = "best-match";
-  int architecture = 0; ///< 0 = any, otherwise 1 or 2
+  int architecture = 0;    ///< 0 = any, otherwise 1 or 2
+  bool calibrated = false; ///< true restricts to calibrated captures
   int page = 1;
+
+  /// The search endpoint caps page_size at 25, lower than every other listing.
   int pageSize = 24;
+};
+
+/// Which listing the browser is showing. Each maps to its own endpoint; only
+/// Search accepts the full filter set.
+enum class ToneListing
+{
+  Search,     ///< /tones/search
+  Favourited, ///< /tones/favorited
+  Created,    ///< /tones/created
+  Downloaded, ///< /tones/downloaded
 };
 
 /// Key under which the refresh token is filed in the OS credential store.
@@ -106,6 +135,15 @@ struct Tokens
 std::vector<std::string> GearOptions();
 std::vector<std::string> SizeOptions();
 std::vector<std::string> SortOptions();
+
+/// Builds the request path for a catalogue search, including the page_size
+/// clamp. Free rather than a private member so it can be tested without a
+/// server: a wrong path here is a 400 at runtime and compiles perfectly.
+std::string BuildSearchPath(const SearchQuery& query);
+
+/// Builds the request path for one of the per-user listings. Returns an empty
+/// string for ToneListing::Search, which has no listing endpoint of its own.
+std::string BuildListingPath(ToneListing listing, int page, int pageSize);
 
 /**
     Client for the public TONE3000 API.
@@ -161,6 +199,21 @@ public:
   /// Searches the catalogue. Blocking.
   bool SearchTones(const SearchQuery& query, TonePage& result, std::string& error);
 
+  /// Fetches one of the per-user listings: favourited, created or downloaded.
+  ///
+  /// These take only paging -- the API applies no filters to them -- so the
+  /// browser's gear and sort controls are inert on these tabs.
+  bool ListTones(ToneListing listing, int page, int pageSize, TonePage& result, std::string& error);
+
+  /// One tone by id, for refreshing a card after it is starred. Blocking.
+  bool GetTone(int toneId, Tone& result, std::string& error);
+
+  /// Stars or unstars a tone for the signed-in user. Blocking.
+  bool SetFavourite(int toneId, bool favourite, std::string& error);
+
+  /// The signed-in account. Blocking.
+  bool GetCurrentUser(User& result, std::string& error);
+
   /// Lists the downloadable models belonging to a tone. Blocking.
   bool ListModels(int toneId, std::vector<Model>& result, std::string& error);
 
@@ -171,6 +224,14 @@ public:
 private:
   /// Performs an authorised GET, refreshing the token once on a 401.
   bool AuthorisedGet(const std::string& path, std::string& responseBody, std::string& error);
+
+  /// The general form: sends once, refreshes on 401, sends again. Favouriting
+  /// replies 200 with a body and unfavouriting replies 204 with none, so an
+  /// empty body is not treated as failure.
+  bool SendAuthorised(const std::string& method,
+                      const std::string& path,
+                      std::string& responseBody,
+                      std::string& error);
 
   std::string mPublishableKey;
 

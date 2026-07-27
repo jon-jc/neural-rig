@@ -16,7 +16,8 @@
 #include "architecture.hpp"
 
 #include "NeuralRigControls.h"
-#include "T3KBrowserControl.h"
+#include "RigSlotControl.h"
+#include "T3KBrowserPanel.h"
 #include "Theme.h"
 
 using namespace iplug;
@@ -108,16 +109,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
   }
 
-  // Pedal FX. Off by default: a capture should sound like the capture until
-  // the user asks for something on top of it.
-  GetParam(kDriveActive)->InitBool("DriveActive", false);
-  GetParam(kDriveAmount)->InitDouble("Drive", 3.0, 0.0, 10.0, 0.01);
-  GetParam(kDelayActive)->InitBool("DelayActive", false);
-  GetParam(kDelayTime)->InitDouble("Time", 350.0, 20.0, 1500.0, 1.0, "ms");
-  GetParam(kDelayMix)->InitDouble("Mix", 25.0, 0.0, 100.0, 0.1, "%");
-  GetParam(kReverbActive)->InitBool("ReverbActive", false);
-  GetParam(kReverbAmount)->InitDouble("Reverb", 25.0, 0.0, 100.0, 0.1, "%");
-
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -186,74 +177,56 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto toggleBlockHeight = switchHeight + 30.f;
     const auto groupChrome = 28.f; // border and label
 
-    // --- Amp: knobs across the full width, with meters bracketing them -------
-    const auto ampGroupHeight = knobBlockHeight + toggleBlockHeight + groupChrome;
-    const auto ampGroup = remaining.GetFromTop(ampGroupHeight);
-    remaining = remaining.GetReducedFromTop(ampGroupHeight + 10.f);
+    // --- Rig: three typed slots across, one knob row beneath -----------------
+    //
+    // Previously three stacked groups -- amp knobs, then a vertical list of
+    // four file rows, then a cabinet row -- which read as a form to fill in.
+    // A rig reads left to right: what the signal hits first is leftmost, and
+    // the controls that shape all of it sit underneath in a single row.
+    const auto slotCardHeight = 146.f;
+    const auto rigGroupHeight = slotCardHeight + knobBlockHeight + groupChrome + 18.f;
+    const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
+    remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
 
-    const auto ampInner = ampGroup.GetPadded(-12.f).GetReducedFromTop(14.f);
-    const auto inputMeterArea = ampInner.GetFromLeft(22.f).GetMidVPadded(78.f);
-    const auto outputMeterArea = ampInner.GetFromRight(22.f).GetMidVPadded(78.f);
+    const auto rigInner = rigGroup.GetPadded(-12.f).GetReducedFromTop(6.f);
 
-    const auto knobsArea = ampInner.GetReducedFromLeft(44.f).GetReducedFromRight(44.f).GetFromTop(NAM_KNOB_HEIGHT);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetMidHPadded(52.f);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(52.f);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetMidHPadded(52.f);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(52.f);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetMidHPadded(52.f);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
+    // Meters bracket the whole rig rather than just the knobs, so input and
+    // output sit at the two ends of the path they actually measure.
+    const auto inputMeterArea = rigInner.GetFromLeft(20.f).GetMidVPadded(rigInner.H() * 0.42f);
+    const auto outputMeterArea = rigInner.GetFromRight(20.f).GetMidVPadded(rigInner.H() * 0.42f);
 
-    // Toggles sit under the knob they belong to. The control draws its own
-    // caption inside its bounds, so it needs the whole block -- handing it only
-    // the switch height is what made the label collide with the switch and both
-    // awkward to hit.
-    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(44.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(44.f);
+    const auto stage = rigInner.GetReducedFromLeft(34.f).GetReducedFromRight(34.f);
 
-    // --- Capture chain ------------------------------------------------------
-    const auto fileHeight = 32.0f;
-    const auto chainGroupHeight = fileHeight * static_cast<float>(kNumSlots) * 1.45f + groupChrome;
-    const auto chainGroup = remaining.GetFromTop(chainGroupHeight);
-    remaining = remaining.GetReducedFromTop(chainGroupHeight + 10.f);
-
-    const auto chainRows = chainGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
-    const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
-
-    auto slotRow = [&](size_t slot) {
-      return chainRows.GetFromTop(slotPitch).GetVShifted(slotPitch * static_cast<float>(slot));
-    };
-    // Left gutter carries the slot number and the connector between stages.
-    auto slotNumberArea = [&](size_t slot) { return slotRow(slot).GetFromLeft(34.f); };
+    const auto slotRowArea = stage.GetFromTop(slotCardHeight);
     auto slotArea = [&](size_t slot) {
-      return slotRow(slot).GetReducedFromLeft(38.f).GetMidVPadded(fileHeight * 0.5f);
+      return slotRowArea.GetGridCell(0, static_cast<int>(slot), 1, static_cast<int>(kNumSlots)).GetPadded(-6.f);
     };
 
-    // --- Cabinet ------------------------------------------------------------
-    const auto cabinetGroupHeight = fileHeight + groupChrome + 12.f;
-    const auto cabinetGroup = remaining.GetFromTop(cabinetGroupHeight);
-    remaining = remaining.GetReducedFromTop(cabinetGroupHeight + 10.f);
+    const auto knobsArea = stage.GetReducedFromTop(slotCardHeight + 14.f).GetFromTop(NAM_KNOB_HEIGHT);
+    const auto noiseGateArea = knobsArea.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(46.f);
+    const auto inputKnobArea = knobsArea.GetGridCell(0, 1, 1, numKnobs).GetMidHPadded(46.f);
+    const auto bassKnobArea = knobsArea.GetGridCell(0, 2, 1, numKnobs).GetMidHPadded(46.f);
+    const auto midKnobArea = knobsArea.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(46.f);
+    const auto trebleKnobArea = knobsArea.GetGridCell(0, 4, 1, numKnobs).GetMidHPadded(46.f);
+    const auto outputKnobArea = knobsArea.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(46.f);
 
-    const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
+    // The two toggles keep their function but move out of the knob row, which
+    // in the target layout carries knobs only. They sit as small switches
+    // beneath the knob each one gates.
+    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + NAM_KNOB_HEIGHT).GetFromTop(switchHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
 
-    // --- Pedal FX -----------------------------------------------------------
-    // Post-amp, like a wet effects loop: drive belongs in front of a capture
-    // and these do not, so they sit after the cabinet where a real rig puts
-    // time-based effects.
-    const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
-    const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
-    const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
-    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight);
+    // The IR toggle belongs in the toggle row with the others, not on the cab
+    // card. Putting it on the card meant it drew over the card's own clear
+    // button and covered the capture name, so the cab slot could not be read
+    // or cleared once something was loaded.
+    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(38.f);
+    const auto irArea = irSwitchArea;
 
-    const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
-    const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
-    const auto delayMixKnobArea = fxKnobRow.GetGridCell(0, 2, 1, 4).GetMidHPadded(48.f);
-    const auto reverbKnobArea = fxKnobRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(48.f);
-
-    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(40.f);
-    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(40.f);
-    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(40.f);
+    // The BROWSER handle, centred under the rig where the panel will appear.
+    const auto browserToggleArea = remaining.GetFromTop(30.f).GetMidHPadded(60.f);
+    remaining = remaining.GetReducedFromTop(36.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -322,52 +295,69 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Raised, titled panels rather than wire-frame groups: a filled surface a
     // step lighter than the chassis, a shadow under it and a lit top edge do
     // far more to separate sections than a drawn border does.
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(ampGroup, "AMP"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(chainGroup, "CAPTURE CHAIN"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(cabinetGroup, "CABINET"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(fxGroup, "PEDAL FX"));
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(rigGroup, ""));
 
-    // The connector threading the capture slots together. Without it the rows
-    // read as four unrelated file pickers rather than a signal path.
-    pGraphics->AttachControl(
-      new nr::theme::ChainFlowControl(chainRows.GetFromLeft(34.f), static_cast<int>(kNumSlots), slotPitch),
-      kCtrlTagChainFlow);
-
-    // Pedal FX
-    pGraphics->AttachControl(new NAMKnobControl(driveKnobArea, kDriveAmount, "Drive", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(delayKnobArea, kDelayTime, "Delay", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(delayMixKnobArea, kDelayMix, "Delay Mix", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(reverbKnobArea, kReverbAmount, "Reverb", style, knobBackgroundBitmap));
-
-    pGraphics->AttachControl(
-      new NAMSwitchControl(driveToggleArea, kDriveActive, "Drive", style, switchHandleBitmap));
-    pGraphics->AttachControl(
-      new NAMSwitchControl(delayToggleArea, kDelayActive, "Delay", style, switchHandleBitmap));
-    pGraphics->AttachControl(
-      new NAMSwitchControl(reverbToggleArea, kReverbActive, "Reverb", style, switchHandleBitmap));
+    // One card per stage. Clicking anywhere on a card opens the browser
+    // already filtered to what can go in it, so choosing a pedal never means
+    // scrolling past amps first.
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumSlots] = {
+      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab};
 
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
-      // Slot numbers are drawn by ChainFlowControl, on its connector, so they
-      // sit on the signal path rather than beside it.
+      const auto kind = kSlotKinds[slot];
 
-      // The globe opens the in-plugin TONE3000 browser aimed at this slot, so
-      // picking a capture fills the row the user clicked. Upstream sends the
-      // user to a web page instead, which leaves them to download, unzip and
-      // find the file by hand.
-      // The globe opens the floating browser aimed at this slot, so whatever is
-      // picked lands in the row that was clicked.
-      auto browseForSlot = [pGraphics, slot](IControl*) {
-        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
-        page->SetTargetSlot(static_cast<int>(slot));
-        page->OpenBrowser();
+      auto browseForSlot = [this, pGraphics, kind](int slotIndex) {
+        mBrowserTargetSlot = slotIndex;
+
+        auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
+
+        if (panel == nullptr)
+          return;
+
+        panel->Hide(false);
+
+        const auto gears = nr::rig::SlotGears(kind);
+        std::string joined;
+
+        for (const auto& gear : gears)
+          joined += joined.empty() ? gear : "_" + gear;
+
+        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind));
+        pGraphics->SetAllControlsDirty();
       };
 
-      pGraphics->AttachControl(
-        new NAMFileBrowserControl(slotArea(slot), kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
-                                  makeLoadModelCompletionHandler(slot), style, fileSVG, crossSVG, leftArrowSVG,
-                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Browse TONE3000", browseForSlot),
-        ModelBrowserCtrlTag(slot));
+      auto clearSlot = [this](int slotIndex) {
+        SendArbitraryMsgFromUI(kMsgTagClearModel, ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0, nullptr);
+      };
+
+      auto dropOnSlot = [this](int slotIndex, const char* path) {
+        std::string extension = std::filesystem::path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if (extension == ".nam")
+        {
+          // Same route the browser's downloads take, so a dropped capture and a
+          // downloaded one are staged identically.
+          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+          mPendingLoads.emplace_back(slotIndex, std::string(path));
+        }
+        else if (extension == ".wav")
+        {
+          // An impulse response is the cabinet, not a slot capture, so it goes
+          // to the IR loader whichever card it was dropped on.
+          WDL_String irPath;
+          irPath.Set(path);
+          mIRPath = irPath;
+          _StageIR(irPath);
+        }
+      };
+
+      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(slot), static_cast<int>(slot), kind,
+                                                           SlotActiveParam(slot), browseForSlot, clearSlot,
+                                                           dropOnSlot),
+                               ModelBrowserCtrlTag(slot));
     }
 
     auto hideSlimOverlay = [](IControl* pCaller) {
@@ -436,22 +426,57 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
                       kCtrlTagSettingsBox)
       ->Hide(true);
 
-    // TONE3000 browser, and the button that opens it.
+    // TONE3000 browser. Docked across the bottom and hidden until asked for.
+    //
+    // The old embedded web view had to float, be movable and be resizable,
+    // because a native web view draws over the IGraphics surface rather than
+    // into it: it could not be docked without either stealing space permanently
+    // or being too small to browse in. This one is drawn by IGraphics like
+    // everything else, so it can simply take the lower half when open and
+    // give it back when closed.
     {
-      auto* browserPage = new T3KBrowserPageControl(b, mBrowser, style);
+      // Anchored under the BROWSER handle rather than to a fraction of the
+      // window. A fixed 58% overlapped the bottom of the rig, hiding the cab
+      // slot and the knob row behind it; deriving the top from the layout means
+      // the two can never collide however the sections above are tuned.
+      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, b.B);
 
-      browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
-        // Called from a worker thread. Park the path and let OnIdle stage it on
-        // the message thread rather than touching model state from here.
-        std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-        mPendingLoads.emplace_back(slot, std::string(filePath));
-      });
+      auto* browserPanel = new nr::browser::T3KBrowserPanel(
+        browserPanelArea, mBrowser,
+        [this](int rowIndex, const nr::net::BrowserController::Row& row) {
+          const int slot = mBrowserTargetSlot;
 
-      // Floats above the rig, closed until asked for. A native web view always
-      // draws over the IGraphics surface, so it cannot be docked without either
-      // stealing space permanently or being too small to browse in; letting the
-      // user move, resize and close it is what makes that liveable.
-      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser);
+          // Local rows are already on disk. Downloading them again would ask
+          // the API for a tone id the Local tab does not even have.
+          if (!row.localPath.empty())
+          {
+            std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+            mPendingLoads.emplace_back(slot, row.localPath);
+            return;
+          }
+
+          mBrowser.DownloadRow(rowIndex, [this, slot](bool success, std::string pathOrError) {
+            if (!success)
+              return;
+
+            // Called from a worker thread. Park the path and let OnIdle stage
+            // it on the message thread rather than touching model state here.
+            std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+            mPendingLoads.emplace_back(slot, pathOrError);
+          });
+        });
+
+      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(true);
+
+      // The handle that opens it without going through a slot.
+      pGraphics->AttachControl(
+        new nr::rig::BrowserToggleControl(browserToggleArea, [pGraphics](bool open) {
+          if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+            panel->Hide(!open);
+
+          pGraphics->SetAllControlsDirty();
+        }),
+        kCtrlTagBrowserToggle);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -580,31 +605,6 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
   sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
-
-  // Pedal FX, after the cabinet and the DC blocker. Order within the loop is
-  // drive into delay into reverb, which is how the pedals would be cabled.
-  {
-    auto* wet = hpfPointers[0];
-
-    if (GetParam(kDriveActive)->Bool())
-    {
-      mDrive.SetAmount(GetParam(kDriveAmount)->Value());
-      mDrive.Process(wet, nFrames);
-    }
-
-    if (GetParam(kDelayActive)->Bool())
-    {
-      mDelay.SetTimeMs(GetParam(kDelayTime)->Value());
-      mDelay.SetMix(GetParam(kDelayMix)->Value() * 0.01);
-      mDelay.Process(wet, nFrames);
-    }
-
-    if (GetParam(kReverbActive)->Bool())
-    {
-      mReverb.SetMix(GetParam(kReverbAmount)->Value() * 0.01);
-      mReverb.Process(wet, nFrames);
-    }
-  }
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state
@@ -632,11 +632,6 @@ void NeuralRig::OnReset()
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
 
-  // FX buffers are sized here, off the audio thread, so processing never
-  // allocates. 1500 ms matches the delay parameter's maximum.
-  mDelay.Prepare(sampleRate, 1500.0);
-  mReverb.Prepare(sampleRate);
-  mReverb.Reset();
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -670,14 +665,15 @@ void NeuralRig::OnIdle()
       filePath.Set(path.c_str());
       _StageModel(static_cast<size_t>(slot), filePath);
 
-      // Take the browser off TONE3000's "you can close this tab" page, which is
-      // a dead end in a plugin with no tabs.
+      // Close the browser once a capture lands: the user asked for one, they
+      // got it, and leaving the panel covering the rig hides the thing they
+      // just changed.
       if (auto* pGraphics = GetUI())
       {
-        if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
         {
-          const std::string label = "slot " + std::to_string(slot + 1);
-          page->As<T3KBrowserPageControl>()->OnCaptureLoaded(label.c_str());
+          panel->Hide(true);
+          pGraphics->SetAllControlsDirty();
         }
       }
     }
@@ -687,36 +683,42 @@ void NeuralRig::OnIdle()
   // signal path shows where audio actually flows.
   if (auto* pGraphics = GetUI())
   {
-    if (auto* flow = pGraphics->GetControlWithTag(kCtrlTagChainFlow))
+    // Push each slot's capture name into its card. The cards draw the name
+    // themselves rather than owning the path, so this is the one place the
+    // rig's actual contents reach the UI.
+    for (size_t slot = 0; slot < kNumSlots; slot++)
     {
-      std::vector<bool> occupied(kNumSlots, false);
-      bool changed = false;
+      const bool occupied = mNAMPaths[slot].GetLength() > 0;
 
-      for (size_t slot = 0; slot < kNumSlots; slot++)
+      if (occupied == mFlowOccupancy[slot])
+        continue;
+
+      mFlowOccupancy[slot] = occupied;
+
+      if (auto* card = pGraphics->GetControlWithTag(ModelBrowserCtrlTag(slot)))
       {
-        occupied[slot] = mNAMPaths[slot].GetLength() > 0;
+        std::string name;
 
-        if (occupied[slot] != mFlowOccupancy[slot])
+        if (occupied)
         {
-          mFlowOccupancy[slot] = occupied[slot];
-          changed = true;
+          // Show the file's stem: the full path is meaningless in a card this
+          // size, and the stem is what the capture is actually called.
+          name = std::filesystem::path(mNAMPaths[slot].Get()).stem().string();
         }
-      }
 
-      if (changed)
-        static_cast<nr::theme::ChainFlowControl*>(flow)->SetOccupancy(occupied);
+        static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+      }
     }
   }
 
-  // Repaint the browser only when something actually changed, rather than at
-  // idle rate.
-  if (mBrowser.ConsumeDirty())
+  // The panel owns the dirty check: it calls ConsumeDirty itself and repaints
+  // only when the controller reports a change. Testing the flag here as well
+  // would swallow the notification, and whichever of the two ran first would
+  // leave the other permanently stale.
+  if (auto* pGraphics = GetUI())
   {
-    if (auto* pGraphics = GetUI())
-    {
-      if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-        page->As<T3KBrowserPageControl>()->Refresh();
-    }
+    if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+      static_cast<nr::browser::T3KBrowserPanel*>(panel)->Poll();
   }
 
   if (mNewModelLoadedInDSP)

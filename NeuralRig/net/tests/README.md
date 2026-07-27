@@ -11,6 +11,13 @@ cleanly whether or not they are correct:
 - **CSPRNG** returns bytes and does not repeat.
 - **Authorize URL** declares `S256`, carries the publishable key, percent-encodes
   the redirect URI, and — asserted explicitly — contains no secret key.
+- **Request paths** for search and the per-user listings: filter joining, the
+  per-endpoint `page_size` clamps, and that `calibrated` is omitted rather than
+  sent as `false` when off. Another case the compiler cannot help with — a wrong
+  parameter is a `400` at runtime.
+- **Gear vocabulary**, asserting the deprecated `full-rig` and `ir` values are
+  gone. Sending `ir` as a gear was quietly reinterpreted by the API as a format
+  filter, so it appeared to match far more than it should.
 - **HTTPS transport**, live against tone3000.com. Unauthenticated, so `401` is
   the expected answer; what matters is completing a TLS handshake and getting a
   real HTTP status rather than a transport failure.
@@ -27,8 +34,11 @@ Windows, from a Developer Command Prompt:
 cl /nologo /EHsc /std:c++17 ^
   /I ..\ /I ..\..\..\NeuralAmpModelerCore\Dependencies\nlohmann ^
   net_check.cpp ..\PlatformWin.cpp ..\PlatformCommon.cpp ..\Tone3000Client.cpp ^
-  /Fe:net_check.exe && net_check.exe
+  /Fe:net_check.exe /link ole32.lib && net_check.exe
 ```
+
+`ole32.lib` is for `CoTaskMemFree`, which `UserDataDirectory` needs to release
+the path handed back by `SHGetKnownFolderPath`.
 
 macOS:
 

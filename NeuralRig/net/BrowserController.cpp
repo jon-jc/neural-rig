@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <system_error>
 
 namespace nr::net
 {
@@ -115,25 +117,49 @@ BrowserController::Snapshot BrowserController::GetSnapshot() const
 
 void BrowserController::RunAsync(std::function<void()> work)
 {
-  // One operation at a time. A second request while one is in flight is
-  // dropped rather than queued: pressing Search twice means you want the
-  // second result, and running both would race over the same state.
+  // One operation at a time, but the newest request wins rather than losing.
+  //
+  // This used to drop anything that arrived mid-flight, on the reasoning that
+  // pressing Search twice means you want the second result. That was backwards:
+  // dropping the second request means you keep the *first* result, so a browser
+  // driven by clicking filters showed the previous filter's results every time.
   bool expected = false;
   if (!mBusy.compare_exchange_strong(expected, true))
+  {
+    std::lock_guard<std::mutex> lock(mPendingMutex);
+    mPendingWork = std::move(work);
     return;
+  }
 
   std::thread([this, work = std::move(work)] {
     work();
     mBusy.store(false, std::memory_order_release);
+
+    // Pick up whatever arrived while we were busy. Releasing mBusy first means
+    // a request landing right now starts on its own thread instead; if it beat
+    // us to it, our re-submission simply becomes the next pending item.
+    std::function<void()> next;
+    {
+      std::lock_guard<std::mutex> lock(mPendingMutex);
+      next.swap(mPendingWork);
+    }
+
+    if (next)
+      RunAsync(std::move(next));
   }).detach();
 }
 
 void BrowserController::Begin()
 {
   if (mClient.LoadSavedSession())
+  {
     SetStatus(Status::Idle, "Connected");
+    FetchIdentity();
+  }
   else
+  {
     SetStatus(Status::SignedOut, "Connect your TONE3000 account to browse captures");
+  }
 }
 
 void BrowserController::SignIn()
@@ -206,6 +232,9 @@ void BrowserController::SignIn()
     }
 
     SetStatus(Status::Idle, "Connected");
+
+    // Already on the worker, so call the blocking form directly.
+    RefreshIdentityBlocking();
   });
 }
 
@@ -217,12 +246,54 @@ void BrowserController::SignOut()
     std::lock_guard<std::mutex> lock(mMutex);
     mSnapshot.rows.clear();
     mTones.clear();
+    mSnapshot.username.clear();
+    mSnapshot.tab = Tab::Browse;
     mSnapshot.page = 1;
     mSnapshot.totalPages = 0;
     mSnapshot.total = 0;
   }
 
   SetStatus(Status::SignedOut, "Signed out");
+}
+
+namespace
+{
+/// Flattens an API record into the display row the UI renders.
+BrowserController::Row RowFrom(const Tone& tone)
+{
+  BrowserController::Row row;
+  row.toneId = tone.id;
+  row.title = tone.title;
+  row.author = tone.author;
+  row.gear = tone.gear;
+  row.licence = tone.licence;
+  row.format = tone.format;
+  row.tags = tone.tags;
+  row.downloads = tone.downloadsCount;
+  row.modelsCount = tone.modelsCount;
+  row.favourited = tone.isFavourited;
+
+  if (!tone.images.empty())
+    row.imageUrl = tone.images.front();
+
+  return row;
+}
+} // namespace
+
+void BrowserController::PublishPage(const TonePage& results, int fallbackPage)
+{
+  std::lock_guard<std::mutex> lock(mMutex);
+
+  mTones = results.tones;
+  mSnapshot.rows.clear();
+  mSnapshot.rows.reserve(results.tones.size());
+
+  for (const auto& tone : results.tones)
+    mSnapshot.rows.push_back(RowFrom(tone));
+
+  mSnapshot.page = results.page > 0 ? results.page : fallbackPage;
+  mSnapshot.totalPages = results.totalPages;
+  mSnapshot.total = results.total;
 }
 
 void BrowserController::Search(const std::string& text,
@@ -243,6 +314,14 @@ void BrowserController::Search(const std::string& text,
   {
     std::lock_guard<std::mutex> lock(mMutex);
     mLastQuery = query;
+
+    // Searching *is* the Browse tab, so own that here. Callers used to call
+    // ShowTab(Browse) first and then Search, but ShowTab routes Browse straight
+    // back into GoToPage -> Search using the previous query. That first search
+    // claimed mBusy and the caller's real one -- carrying the new filter -- was
+    // dropped, so the results always lagged one click behind: picking the amp
+    // slot showed whatever the pedal slot had just asked for.
+    mSnapshot.tab = Tab::Browse;
   }
 
   RunAsync([this, query] {
@@ -257,33 +336,160 @@ void BrowserController::Search(const std::string& text,
       return;
     }
 
+    PublishPage(results, query.page);
+
+    SetStatus(Status::Idle, results.tones.empty() ? "No captures matched" : "Connected");
+  });
+}
+
+void BrowserController::ShowTab(Tab tab, int page)
+{
+  {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mSnapshot.tab = tab;
+  }
+
+  // Browse is the search tab; re-running the last query keeps the user's
+  // filters rather than silently resetting them on every tab round trip.
+  if (tab == Tab::Browse)
+  {
+    GoToPage(page);
+    return;
+  }
+
+  if (tab == Tab::Local)
+  {
+    LoadLocalRows();
+    MarkDirty();
+    return;
+  }
+
+  ToneListing listing = ToneListing::Favourited;
+
+  switch (tab)
+  {
+    case Tab::Favourites: listing = ToneListing::Favourited; break;
+    case Tab::Created: listing = ToneListing::Created; break;
+    case Tab::Recent: listing = ToneListing::Downloaded; break;
+    default: break;
+  }
+
+  const int wanted = std::max(1, page);
+
+  RunAsync([this, listing, wanted] {
+    SetStatus(Status::Working, "Loading...");
+
+    TonePage results;
+    std::string error;
+
+    if (!mClient.ListTones(listing, wanted, 24, results, error))
+    {
+      SetStatus(Status::Failed, error);
+      return;
+    }
+
+    PublishPage(results, wanted);
+
+    SetStatus(Status::Idle, results.tones.empty() ? "Nothing here yet" : "Connected");
+  });
+}
+
+void BrowserController::ToggleFavourite(int rowIndex)
+{
+  int toneId = 0;
+  bool wanted = false;
+
+  {
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(mSnapshot.rows.size()))
+      return;
+
+    toneId = mSnapshot.rows[rowIndex].toneId;
+    wanted = !mSnapshot.rows[rowIndex].favourited;
+  }
+
+  RunAsync([this, rowIndex, toneId, wanted] {
+    std::string error;
+
+    if (!mClient.SetFavourite(toneId, wanted, error))
+    {
+      SetStatus(Status::Failed, error);
+      return;
+    }
+
     {
       std::lock_guard<std::mutex> lock(mMutex);
 
-      mTones = results.tones;
-      mSnapshot.rows.clear();
-      mSnapshot.rows.reserve(results.tones.size());
-
-      for (const auto& tone : results.tones)
-      {
-        Row row;
-        row.toneId = tone.id;
-        row.title = tone.title;
-        row.author = tone.author;
-        row.gear = tone.gear;
-        row.licence = tone.licence;
-        row.downloads = tone.downloadsCount;
-        mSnapshot.rows.push_back(std::move(row));
-      }
-
-      mSnapshot.page = results.page > 0 ? results.page : query.page;
-      mSnapshot.totalPages = results.totalPages;
-      mSnapshot.total = results.total;
+      // The list can have been replaced while the request was in flight, so
+      // check the row still holds the tone we starred before writing to it.
+      if (rowIndex < static_cast<int>(mSnapshot.rows.size())
+          && mSnapshot.rows[rowIndex].toneId == toneId)
+        mSnapshot.rows[rowIndex].favourited = wanted;
     }
 
-    SetStatus(results.tones.empty() ? Status::Idle : Status::Idle,
-              results.tones.empty() ? "No captures matched" : "Connected");
+    SetStatus(Status::Idle, wanted ? "Saved to favourites" : "Removed from favourites");
   });
+}
+
+void BrowserController::RefreshIdentityBlocking()
+{
+  User user;
+  std::string error;
+
+  // A failure here is not worth surfacing: the browser works perfectly well
+  // without knowing the user's name, and reporting it would replace a real
+  // status message with a cosmetic complaint.
+  if (!mClient.GetCurrentUser(user, error))
+    return;
+
+  {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mSnapshot.username = user.username;
+  }
+
+  MarkDirty();
+}
+
+void BrowserController::FetchIdentity()
+{
+  RunAsync([this] { RefreshIdentityBlocking(); });
+}
+
+void BrowserController::LoadLocalRows()
+{
+  std::vector<Row> rows;
+  std::error_code ec;
+
+  // Not an error worth reporting: an empty cache is the normal state before
+  // the user has downloaded anything.
+  for (const auto& entry : std::filesystem::directory_iterator(CacheDirectory(), ec))
+  {
+    if (!entry.is_regular_file(ec))
+      continue;
+
+    const auto path = entry.path();
+    const auto extension = path.extension().string();
+
+    if (extension != ".nam" && extension != ".wav")
+      continue;
+
+    Row row;
+    row.title = path.stem().string();
+    row.localPath = path.string();
+    row.format = extension == ".nam" ? "nam" : "ir";
+    row.author = "On this machine";
+    rows.push_back(std::move(row));
+  }
+
+  std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.title < b.title; });
+
+  std::lock_guard<std::mutex> lock(mMutex);
+  mSnapshot.rows = std::move(rows);
+  mSnapshot.page = 1;
+  mSnapshot.totalPages = 1;
+  mSnapshot.total = static_cast<int>(mSnapshot.rows.size());
+  mSnapshot.message = mSnapshot.rows.empty() ? "No downloaded captures yet" : "Local cache";
 }
 
 void BrowserController::GoToPage(int page)

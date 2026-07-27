@@ -9,7 +9,6 @@
 #include "../NeuralAmpModelerCore/NAM/slimmable.h"
 
 #include "Colors.h"
-#include "PedalFX.h"
 #include "ToneStack.h"
 #include "net/BrowserController.h"
 
@@ -26,7 +25,11 @@ constexpr size_t kNumChannelsInternal = 1;
 
 // Capture slots in the chain. Each is a full network evaluation per sample, so
 // four is both a heavy load and enough for pedal into amp into a second stage.
-constexpr size_t kNumSlots = 4;
+/// Three typed slots -- pedal, amp, cab -- rather than four interchangeable
+/// ones. Four said nothing about what belonged where; three named stages read
+/// as a signal path, and the type seeds the browser's gear filter so each slot
+/// opens the catalogue already narrowed to what can go in it.
+constexpr size_t kNumSlots = 3;
 
 // Capacity of each slot's bypass delay line, allocated once so ProcessBlock
 // never allocates. Resampling latency is a few hundred samples at most.
@@ -65,16 +68,6 @@ enum EParams
   kSlot1Active,
   kSlot2Active,
   kSlot3Active,
-  kSlot4Active,
-  // Pedal FX, after the cabinet: drive belongs in front of a capture, and
-  // these are the ones that belong behind it.
-  kDriveActive,
-  kDriveAmount,
-  kDelayActive,
-  kDelayTime,
-  kDelayMix,
-  kReverbActive,
-  kReverbAmount,
   kNumParams
 };
 
@@ -106,6 +99,7 @@ enum ECtrlTags
   kCtrlTagSlimKnob,
   kCtrlTagT3KBrowser,
   kCtrlTagChainFlow,
+  kCtrlTagBrowserToggle,
   kNumCtrlTags
 };
 
@@ -405,12 +399,6 @@ private:
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
 
-  // Pedal FX, applied after the cabinet and DC blocker -- the wet end of the
-  // loop, where a real rig puts time-based effects.
-  nr::fx::Drive mDrive;
-  nr::fx::Delay mDelay;
-  nr::fx::Reverb mReverb;
-
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
@@ -425,6 +413,10 @@ private:
   // TONE3000 browsing. The controller owns all the threading; the plugin only
   // polls it from OnIdle.
   nr::net::BrowserController mBrowser;
+
+  // Which slot the browser is filling. Set by the slot's globe button, read
+  // when a card is clicked, so one panel serves every slot.
+  int mBrowserTargetSlot = 0;
 
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the

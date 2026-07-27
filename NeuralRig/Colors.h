@@ -53,6 +53,22 @@ const iplug::igraphics::IColor METER_OK(255, 118, 184, 108);
 const iplug::igraphics::IColor METER_HOT(255, 255, 163, 64);
 const iplug::igraphics::IColor METER_CLIP(255, 224, 76, 62);
 
+// --- Gear badges ------------------------------------------------------------
+// The browser shows no artwork, so type is carried entirely by colour: a badge
+// pill and a left edge on each card. These are the one place the amber-only
+// rule is relaxed, because hue is doing real work here rather than decorating
+// -- you should be able to pick the pedals out of a list without reading it.
+//
+// Each is desaturated enough to sit on the near-black chassis without glaring,
+// and they stay distinguishable from one another at badge size.
+const iplug::igraphics::IColor GEAR_AMP(255, 88, 150, 224); // blue
+const iplug::igraphics::IColor GEAR_AMP_CAB(255, 232, 146, 58); // orange
+const iplug::igraphics::IColor GEAR_PEDAL(255, 154, 108, 232); // violet
+const iplug::igraphics::IColor GEAR_CAB(255, 226, 96, 150); // pink
+const iplug::igraphics::IColor GEAR_OUTBOARD(255, 104, 190, 132); // green
+const iplug::igraphics::IColor GEAR_SPACE(255, 78, 190, 196); // teal
+const iplug::igraphics::IColor GEAR_OTHER(255, 130, 130, 140); // grey
+
 // --- Names upstream's controls expect --------------------------------------
 const iplug::igraphics::IColor OFF_WHITE = INK;
 const iplug::igraphics::IColor NAM_0(0, 10, 10, 12); // transparent
