@@ -116,6 +116,32 @@ std::vector<std::string> StringsFrom(const nlohmann::json& object, const char* k
   return values;
 }
 
+/// Artwork URLs. The docs name the field but not its element shape, so accept
+/// both a bare array of strings and the array-of-objects form the other
+/// collection fields use.
+std::vector<std::string> UrlsFrom(const nlohmann::json& object, const char* key)
+{
+  std::vector<std::string> urls;
+
+  if (!object.contains(key) || !object[key].is_array())
+    return urls;
+
+  for (const auto& entry : object[key])
+  {
+    if (entry.is_string())
+      urls.push_back(entry.get<std::string>());
+    else if (entry.is_object())
+      for (const char* field : {"url", "image_url", "src"})
+        if (entry.contains(field) && entry[field].is_string())
+        {
+          urls.push_back(entry[field].get<std::string>());
+          break;
+        }
+  }
+
+  return urls;
+}
+
 Tone ToneFrom(const nlohmann::json& object)
 {
   Tone tone;
@@ -132,11 +158,36 @@ Tone ToneFrom(const nlohmann::json& object)
   tone.makes = NamesFrom(object, "makes");
   tone.tags = NamesFrom(object, "tags");
   tone.sizes = StringsFrom(object, "sizes");
+  tone.images = UrlsFrom(object, "images");
 
   if (object.contains("user") && object["user"].is_object())
     tone.author = StringFrom(object["user"], "username");
 
   return tone;
+}
+
+/// Reads the PaginatedResponse envelope the listing endpoints share.
+bool ParseTonePage(const std::string& body, TonePage& result, std::string& error)
+{
+  const auto parsed = nlohmann::json::parse(body, nullptr, false);
+
+  if (parsed.is_discarded() || !parsed.is_object())
+  {
+    error = "TONE3000 returned an unexpected response.";
+    return false;
+  }
+
+  result = {};
+  result.page = IntFrom(parsed, "page");
+  result.pageSize = IntFrom(parsed, "page_size");
+  result.total = IntFrom(parsed, "total");
+  result.totalPages = IntFrom(parsed, "total_pages");
+
+  if (parsed.contains("data") && parsed["data"].is_array())
+    for (const auto& entry : parsed["data"])
+      result.tones.push_back(ToneFrom(entry));
+
+  return true;
 }
 
 Model ModelFrom(const nlohmann::json& object)
@@ -178,7 +229,11 @@ PkcePair CreatePkcePair()
 
 std::vector<std::string> GearOptions()
 {
-  return {"amp", "full-rig", "pedal", "outboard", "ir"};
+  // The current vocabulary. "full-rig" and "ir" are deprecated aliases we used
+  // to send: the first is now "amp-cab", and the second was never a gear type
+  // at all -- the API stripped it and inferred format=ir from it instead, which
+  // is why filtering by it quietly returned cabs and everything else besides.
+  return {"amp", "amp-cab", "pedal", "outboard", "cab", "space", "experimental"};
 }
 
 std::vector<std::string> SizeOptions()
@@ -382,7 +437,10 @@ void Tone3000Client::SignOut()
 
 // --- Requests ---------------------------------------------------------------
 
-bool Tone3000Client::AuthorisedGet(const std::string& path, std::string& responseBody, std::string& error)
+bool Tone3000Client::SendAuthorised(const std::string& method,
+                                    const std::string& path,
+                                    std::string& responseBody,
+                                    std::string& error)
 {
   if (!IsConnected())
   {
@@ -397,7 +455,7 @@ bool Tone3000Client::AuthorisedGet(const std::string& path, std::string& respons
 
   const std::string url = std::string(kTone3000BaseUrl) + path;
 
-  auto response = HttpRequest("GET", url, {{"Authorization", "Bearer " + GetTokens().accessToken}});
+  auto response = HttpRequest(method, url, {{"Authorization", "Bearer " + GetTokens().accessToken}});
 
   // One retry on 401 covers the race between the expiry check above and the
   // request actually landing.
@@ -406,12 +464,20 @@ bool Tone3000Client::AuthorisedGet(const std::string& path, std::string& respons
     if (!RefreshTokens(error))
       return false;
 
-    response = HttpRequest("GET", url, {{"Authorization", "Bearer " + GetTokens().accessToken}});
+    response = HttpRequest(method, url, {{"Authorization", "Bearer " + GetTokens().accessToken}});
   }
 
   if (response.statusCode == 0)
   {
     error = "Could not reach TONE3000: " + response.transportError;
+    return false;
+  }
+
+  // Search is rate-limited hard enough that users will meet this, so name it
+  // rather than reporting a bare status code they cannot act on.
+  if (response.statusCode == 429)
+  {
+    error = "TONE3000 is rate-limiting us. Give it a moment.";
     return false;
   }
 
@@ -425,11 +491,19 @@ bool Tone3000Client::AuthorisedGet(const std::string& path, std::string& respons
   return true;
 }
 
-bool Tone3000Client::SearchTones(const SearchQuery& query, TonePage& result, std::string& error)
+bool Tone3000Client::AuthorisedGet(const std::string& path, std::string& responseBody, std::string& error)
+{
+  return SendAuthorised("GET", path, responseBody, error);
+}
+
+std::string BuildSearchPath(const SearchQuery& query)
 {
   std::ostringstream path;
+
+  // Search caps page_size at 25, unlike the other listings which allow 100.
+  // Asking for more is a 400, so clamp rather than pass the caller's number on.
   path << "/api/v1/tones/search?page=" << std::max(1, query.page)
-       << "&page_size=" << std::min(100, std::max(1, query.pageSize));
+       << "&page_size=" << std::min(25, std::max(1, query.pageSize));
 
   if (!query.text.empty())
     path << "&query=" << UrlEncode(query.text);
@@ -445,11 +519,106 @@ bool Tone3000Client::SearchTones(const SearchQuery& query, TonePage& result, std
   if (!query.sizes.empty())
     path << "&sizes=" << UrlEncode(Join(query.sizes, "_"));
 
+  if (!query.format.empty())
+    path << "&format=" << UrlEncode(query.format);
+
   if (query.architecture > 0)
     path << "&architecture=" << query.architecture;
 
+  // Only send calibrated when it is on: the parameter filters rather than
+  // toggles, so calibrated=false would still narrow the results.
+  if (query.calibrated)
+    path << "&calibrated=true";
+
+  return path.str();
+}
+
+std::string BuildListingPath(ToneListing listing, int page, int pageSize)
+{
+  const char* endpoint = nullptr;
+
+  switch (listing)
+  {
+    case ToneListing::Favourited: endpoint = "favorited"; break;
+    case ToneListing::Created: endpoint = "created"; break;
+    case ToneListing::Downloaded: endpoint = "downloaded"; break;
+    case ToneListing::Search: return {};
+  }
+
+  std::ostringstream path;
+  path << "/api/v1/tones/" << endpoint << "?page=" << std::max(1, page)
+       << "&page_size=" << std::min(100, std::max(1, pageSize));
+
+  return path.str();
+}
+
+bool Tone3000Client::SearchTones(const SearchQuery& query, TonePage& result, std::string& error)
+{
   std::string body;
-  if (!AuthorisedGet(path.str(), body, error))
+  if (!AuthorisedGet(BuildSearchPath(query), body, error))
+    return false;
+
+  return ParseTonePage(body, result, error);
+}
+
+bool Tone3000Client::ListTones(
+  ToneListing listing, int page, int pageSize, TonePage& result, std::string& error)
+{
+  const std::string path = BuildListingPath(listing, page, pageSize);
+
+  if (path.empty())
+  {
+    // Search needs its filters; routing it here would silently drop them.
+    error = "Use SearchTones for the search listing.";
+    return false;
+  }
+
+  std::string body;
+  if (!AuthorisedGet(path, body, error))
+    return false;
+
+  if (!ParseTonePage(body, result, error))
+    return false;
+
+  // The favourites listing is by definition all favourites; the endpoint does
+  // not repeat that per entry, so fill it in for the star to render correctly.
+  if (listing == ToneListing::Favourited)
+    for (auto& tone : result.tones)
+      tone.isFavourited = true;
+
+  return true;
+}
+
+bool Tone3000Client::GetTone(int toneId, Tone& result, std::string& error)
+{
+  std::string body;
+  if (!AuthorisedGet("/api/v1/tones/" + std::to_string(toneId), body, error))
+    return false;
+
+  const auto parsed = nlohmann::json::parse(body, nullptr, false);
+
+  if (parsed.is_discarded() || !parsed.is_object())
+  {
+    error = "TONE3000 returned an unexpected response.";
+    return false;
+  }
+
+  result = ToneFrom(parsed);
+  return true;
+}
+
+bool Tone3000Client::SetFavourite(int toneId, bool favourite, std::string& error)
+{
+  const std::string path = "/api/v1/tones/" + std::to_string(toneId) + "/favorite";
+
+  std::string body;
+  return SendAuthorised(favourite ? "PUT" : "DELETE", path, body, error);
+}
+
+bool Tone3000Client::GetCurrentUser(User& result, std::string& error)
+{
+  std::string body;
+  if (!AuthorisedGet("/api/v1/user", body, error))
     return false;
 
   const auto parsed = nlohmann::json::parse(body, nullptr, false);
@@ -461,14 +630,10 @@ bool Tone3000Client::SearchTones(const SearchQuery& query, TonePage& result, std
   }
 
   result = {};
-  result.page = IntFrom(parsed, "page");
-  result.pageSize = IntFrom(parsed, "page_size");
-  result.total = IntFrom(parsed, "total");
-  result.totalPages = IntFrom(parsed, "total_pages");
-
-  if (parsed.contains("data") && parsed["data"].is_array())
-    for (const auto& entry : parsed["data"])
-      result.tones.push_back(ToneFrom(entry));
+  result.id = IntFrom(parsed, "id");
+  result.username = StringFrom(parsed, "username");
+  result.avatarUrl = StringFrom(parsed, "avatar_url");
+  result.url = StringFrom(parsed, "url");
 
   return true;
 }

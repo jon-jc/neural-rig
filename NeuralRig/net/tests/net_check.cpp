@@ -5,6 +5,7 @@
 // looks like "sign-in is broken" rather than "the hash is wrong". RFC 7636
 // Appendix B publishes a verifier/challenge pair, so we can check exactly.
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -84,6 +85,72 @@ int main()
     Check(url.find("127.0.0.1%3A49500") != std::string::npos, "redirect_uri is percent-encoded");
     Check(url.find("format=nam") != std::string::npos, "asks only for NAM captures");
     Check(url.find("t3k_cs_") == std::string::npos, "does NOT leak a secret key");
+  }
+
+  printf("Request paths\n");
+  {
+    // These are pure string building, and a wrong parameter here compiles fine
+    // and fails as a 400 at runtime, so they are worth pinning down.
+    SearchQuery query;
+    query.text = "vox ac30";
+    query.gears = {"amp", "amp-cab"};
+    query.sizes = {"standard", "lite"};
+    query.format = "nam";
+    query.sort = "trending";
+    query.architecture = 2;
+    query.calibrated = true;
+    query.page = 3;
+
+    const auto path = BuildSearchPath(query);
+
+    Check(path.find("/api/v1/tones/search?") == 0, "hits the search endpoint");
+    Check(path.find("query=vox%20ac30") != std::string::npos || path.find("query=vox+ac30") != std::string::npos,
+          "percent-encodes the search text");
+    Check(path.find("gears=amp_amp-cab") != std::string::npos, "joins gears with underscores");
+    Check(path.find("sizes=standard_lite") != std::string::npos, "joins sizes with underscores");
+    Check(path.find("format=nam") != std::string::npos, "carries the format filter");
+    Check(path.find("sort=trending") != std::string::npos, "carries the sort");
+    Check(path.find("architecture=2") != std::string::npos, "carries the architecture");
+    Check(path.find("calibrated=true") != std::string::npos, "carries calibrated when set");
+    Check(path.find("page=3") != std::string::npos, "carries the page");
+
+    // The search endpoint caps page_size at 25 while the listings allow 100.
+    SearchQuery greedy;
+    greedy.pageSize = 100;
+    Check(BuildSearchPath(greedy).find("page_size=25") != std::string::npos,
+          "clamps page_size to the search maximum");
+
+    // calibrated filters rather than toggles, so it must be absent when off.
+    SearchQuery plain;
+    Check(BuildSearchPath(plain).find("calibrated") == std::string::npos,
+          "omits calibrated entirely when it is off");
+
+    Check(BuildListingPath(ToneListing::Favourited, 1, 10).find("/api/v1/tones/favorited?") == 0,
+          "favourites listing uses the American spelling the API does");
+    Check(BuildListingPath(ToneListing::Created, 1, 10).find("/api/v1/tones/created?") == 0,
+          "created listing");
+    Check(BuildListingPath(ToneListing::Downloaded, 1, 10).find("/api/v1/tones/downloaded?") == 0,
+          "downloaded listing");
+    Check(BuildListingPath(ToneListing::Search, 1, 10).empty(),
+          "search has no listing endpoint of its own");
+    Check(BuildListingPath(ToneListing::Created, 1, 500).find("page_size=100") != std::string::npos,
+          "clamps listing page_size to 100");
+  }
+
+  printf("Gear vocabulary\n");
+  {
+    const auto gears = GearOptions();
+    const auto has = [&](const char* v) {
+      return std::find(gears.begin(), gears.end(), v) != gears.end();
+    };
+
+    // "full-rig" and "ir" are deprecated aliases. Sending "ir" as a gear was
+    // silently reinterpreted as a format filter, which is why it appeared to
+    // match far more than it should.
+    Check(has("amp-cab"), "uses amp-cab");
+    Check(has("cab"), "offers cab, which the rig needs for its IR slot");
+    Check(!has("full-rig"), "no deprecated full-rig");
+    Check(!has("ir"), "no deprecated ir");
   }
 
   printf("Credential store\n");
