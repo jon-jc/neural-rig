@@ -91,15 +91,26 @@ class RigSlotControl : public IControl
 {
 public:
   using SlotAction = std::function<void(int slot)>;
+  using DropAction = std::function<void(int slot, const char* path)>;
 
   RigSlotControl(const IRECT& bounds, int slot, SlotKind kind, int activeParam, SlotAction onBrowse,
-                 SlotAction onClear)
+                 SlotAction onClear, DropAction onDrop)
   : IControl(bounds, activeParam)
   , mSlot(slot)
   , mKind(kind)
   , mOnBrowse(std::move(onBrowse))
   , mOnClear(std::move(onClear))
+  , mOnDrop(std::move(onDrop))
   {
+  }
+
+  /// Dropping a file onto a card fills it. The empty state advertises this, so
+  /// it has to work: iPlug2 already routes the platform's drop to the control
+  /// under the cursor, and nothing was listening.
+  void OnDrop(const char* path) override
+  {
+    if (mOnDrop && path != nullptr)
+      mOnDrop(mSlot, path);
   }
 
   void OnResize() override { LayOut(); }
@@ -238,6 +249,7 @@ private:
   SlotKind mKind;
   SlotAction mOnBrowse;
   SlotAction mOnClear;
+  DropAction mOnDrop;
 
   std::string mCaptureName;
   bool mHovered = false;

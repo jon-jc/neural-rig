@@ -331,8 +331,32 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         SendArbitraryMsgFromUI(kMsgTagClearModel, ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0, nullptr);
       };
 
+      auto dropOnSlot = [this](int slotIndex, const char* path) {
+        std::string extension = std::filesystem::path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if (extension == ".nam")
+        {
+          // Same route the browser's downloads take, so a dropped capture and a
+          // downloaded one are staged identically.
+          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+          mPendingLoads.emplace_back(slotIndex, std::string(path));
+        }
+        else if (extension == ".wav")
+        {
+          // An impulse response is the cabinet, not a slot capture, so it goes
+          // to the IR loader whichever card it was dropped on.
+          WDL_String irPath;
+          irPath.Set(path);
+          mIRPath = irPath;
+          _StageIR(irPath);
+        }
+      };
+
       pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(slot), static_cast<int>(slot), kind,
-                                                           SlotActiveParam(slot), browseForSlot, clearSlot),
+                                                           SlotActiveParam(slot), browseForSlot, clearSlot,
+                                                           dropOnSlot),
                                ModelBrowserCtrlTag(slot));
     }
 
