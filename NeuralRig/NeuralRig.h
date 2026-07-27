@@ -105,6 +105,7 @@ enum ECtrlTags
   kCtrlTagSlimOverlayBackdrop,
   kCtrlTagSlimKnob,
   kCtrlTagT3KBrowser,
+  kCtrlTagChainFlow,
   kNumCtrlTags
 };
 
@@ -431,6 +432,10 @@ private:
   // thread in OnIdle instead.
   std::mutex mPendingLoadMutex;
   std::vector<std::pair<int, std::string>> mPendingLoads;
+
+  // Last-known slot occupancy, so the chain connector is only redrawn when a
+  // slot is actually filled or emptied rather than every idle tick.
+  bool mFlowOccupancy[kNumSlots] = {};
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 

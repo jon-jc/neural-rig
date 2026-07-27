@@ -1,15 +1,16 @@
-# Build output
-build-win/
-build-mac/
-build-ios/
-build-web/
-*/build-win/
-*/build-mac/
-out/
-Release/
-Debug/
-x64/
-Win32/
+# Build output.
+#
+# These are anchored deliberately. An unanchored "x64/" matches at any depth,
+# and it silently swallowed the WebView2 SDK's own x64 directory -- the arm64
+# and x86 import libraries were committed while the one architecture we build
+# for was not, so CI failed to link something that was present locally.
+/NeuralRig/build-win/
+/NeuralRig/build-mac/
+/NeuralRig/build-ios/
+/NeuralRig/build-web/
+/build-win/
+/build-mac/
+/out/
 
 # Visual Studio
 .vs/
