@@ -73,12 +73,40 @@ public:
     return false;
   }
 
+  /// Collapses the browser out of sight, or brings it back.
+  ///
+  /// IControl::Hide() cannot help here: the web view is a native OS window
+  /// layered over the IGraphics surface, so it keeps drawing regardless of what
+  /// the control thinks its visibility is. Moving it outside the window is the
+  /// lever the platform actually gives us.
+  void SetCollapsed(bool collapsed)
+  {
+    if (mCollapsed == collapsed || mWebView == nullptr)
+      return;
+
+    mCollapsed = collapsed;
+
+    const auto parked = IRECT(mContentBounds.L, mContentBounds.B + 4000.f, mContentBounds.R,
+                              mContentBounds.B + 4000.f + mContentBounds.H());
+
+    mWebView->SetTargetAndDrawRECTs(collapsed ? parked : mContentBounds);
+    mWebView->OnResize();
+
+    if (mCollapseButton != nullptr)
+      mCollapseButton->SetLabelStr(collapsed ? "SHOW" : "HIDE");
+
+    SetDirty(false);
+  }
+
+  bool IsCollapsed() const { return mCollapsed; }
+
   void OnAttached() override
   {
     auto remaining = GetRECT();
 
     auto header = remaining.GetFromTop(kHeaderHeight);
     remaining = remaining.GetReducedFromTop(kHeaderHeight);
+    mContentBounds = remaining;
 
     const auto headerPad = header.GetPadded(-12.f);
 
@@ -107,11 +135,15 @@ public:
     AddChildControl(mSlotButton);
 
     AddChildControl(new IVButtonControl(
-      buttons.GetFromRight(64.f), [this](IControl*) { NavigateHome(); }, "RELOAD", mStyle));
+      buttons.GetFromRight(140.f).GetFromLeft(68.f), [this](IControl*) { NavigateHome(); }, "RELOAD", mStyle));
+
+    mCollapseButton = new IVButtonControl(
+      buttons.GetFromRight(64.f), [this](IControl*) { SetCollapsed(!mCollapsed); }, "HIDE", mStyle);
+    AddChildControl(mCollapseButton);
 
     // The browser fills everything below the header.
     mWebView = new IWebViewControl(
-      remaining, true, [this](IWebViewControl* pCaller) { OnWebViewReady(pCaller); },
+      mContentBounds, true, [this](IWebViewControl* pCaller) { OnWebViewReady(pCaller); },
       [this](IWebViewControl*, const char* json) { (void)json; });
 
     AddChildControl(mWebView);
@@ -173,7 +205,7 @@ public:
   }
 
 private:
-  static constexpr float kHeaderHeight = 52.f;
+  static constexpr float kHeaderHeight = NR_BROWSER_HEADER_HEIGHT;
   static constexpr int kSelectionTimeoutMs = 600000; // ten minutes of browsing
 
   void OnWebViewReady(IWebViewControl* pCaller)
@@ -226,7 +258,11 @@ private:
 
   IWebViewControl* mWebView = nullptr;
   IVButtonControl* mSlotButton = nullptr;
+  IVButtonControl* mCollapseButton = nullptr;
   ITextControl* mStatusLabel = nullptr;
+
+  IRECT mContentBounds;
+  bool mCollapsed = false;
 
   nr::net::LoopbackServer mLoopback;
   nr::net::PkcePair mPkce;

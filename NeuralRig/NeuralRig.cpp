@@ -157,16 +157,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto b = pGraphics->GetBounds();
 
-    // The browser column is reserved first and nothing else may draw into it:
-    // a native web view sits above the IGraphics surface, so anything sharing
-    // its rectangle would simply be hidden.
-    const auto browserColumn = b.GetFromRight(NR_BROWSER_COLUMN_WIDTH);
-    const auto rigColumn = b.GetReducedFromRight(NR_BROWSER_COLUMN_WIDTH);
+    // The browser strip is reserved first and nothing else may draw into it: a
+    // native web view sits above the IGraphics surface, so anything sharing its
+    // rectangle would simply be hidden.
+    const auto browserStrip = b.GetFromBottom(NR_BROWSER_HEIGHT);
+    const auto rigArea = b.GetReducedFromBottom(NR_BROWSER_HEIGHT);
 
     // Every section is carved off a running remainder rather than positioned by
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
     // bottom here is reading the signal path.
-    auto remaining = rigColumn.GetPadded(-16.f);
+    auto remaining = rigArea.GetPadded(-14.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
@@ -174,9 +174,17 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto titleArea = headerArea.GetFromLeft(320.f);
     const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
 
+    // Section heights are derived from what they hold rather than guessed. The
+    // FX group previously got less than a knob row plus a toggle row, so the
+    // toggles drew over the knobs and the value readouts fell off the window.
+    const auto knobBlockHeight = NAM_KNOB_HEIGHT + 34.f; // knob + its value text
+    const auto toggleBlockHeight = 46.f;                 // switch + its caption
+    const auto groupChrome = 28.f;                       // border and label
+
     // --- Amp: knobs across the full width, with meters bracketing them -------
-    const auto ampGroup = remaining.GetFromTop(250.f);
-    remaining = remaining.GetReducedFromTop(250.f + 10.f);
+    const auto ampGroupHeight = knobBlockHeight + toggleBlockHeight + groupChrome;
+    const auto ampGroup = remaining.GetFromTop(ampGroupHeight);
+    remaining = remaining.GetReducedFromTop(ampGroupHeight + 10.f);
 
     const auto ampInner = ampGroup.GetPadded(-12.f).GetReducedFromTop(14.f);
     const auto inputMeterArea = ampInner.GetFromLeft(22.f).GetMidVPadded(78.f);
@@ -191,14 +199,15 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
 
     // Toggles sit under the knob they belong to, with room to breathe.
-    const auto toggleRow = ampInner.GetFromBottom(46.f);
+    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight).GetFromTop(28.f);
     const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(34.f);
     const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(34.f);
 
     // --- Capture chain ------------------------------------------------------
     const auto fileHeight = 32.0f;
-    const auto chainGroup = remaining.GetFromTop(216.f);
-    remaining = remaining.GetReducedFromTop(216.f + 10.f);
+    const auto chainGroupHeight = fileHeight * static_cast<float>(kNumSlots) * 1.45f + groupChrome;
+    const auto chainGroup = remaining.GetFromTop(chainGroupHeight);
+    remaining = remaining.GetReducedFromTop(chainGroupHeight + 10.f);
 
     const auto chainRows = chainGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
     const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
@@ -213,8 +222,9 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     };
 
     // --- Cabinet ------------------------------------------------------------
-    const auto cabinetGroup = remaining.GetFromTop(74.f);
-    remaining = remaining.GetReducedFromTop(74.f + 10.f);
+    const auto cabinetGroupHeight = fileHeight + groupChrome + 12.f;
+    const auto cabinetGroup = remaining.GetFromTop(cabinetGroupHeight);
+    remaining = remaining.GetReducedFromTop(cabinetGroupHeight + 10.f);
 
     const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
@@ -223,10 +233,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Post-amp, like a wet effects loop: drive belongs in front of a capture
     // and these do not, so they sit after the cabinet where a real rig puts
     // time-based effects.
-    const auto fxGroup = remaining;
+    const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
     const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
     const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
-    const auto fxToggleRow = fxInner.GetFromBottom(30.f);
+    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight).GetFromTop(28.f);
 
     const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
     const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
@@ -415,7 +425,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     // TONE3000 browser, and the button that opens it.
     {
-      auto* browserPage = new T3KBrowserPageControl(browserColumn, mBrowser, style);
+      auto* browserPage = new T3KBrowserPageControl(browserStrip, mBrowser, style);
 
       browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
         // Called from a worker thread. Park the path and let OnIdle stage it on

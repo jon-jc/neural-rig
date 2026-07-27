@@ -30,15 +30,16 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-// Two columns: the rig on the left, TONE3000 on the right.
+// The rig stacked top to bottom, with TONE3000 across the bottom.
 //
 // The browser is a native OS view (WebView2 / WKWebView) and always draws above
-// anything IGraphics paints -- the platform gives no way around that. So it
-// gets a permanent column of its own rather than being a modal, which is what
-// made it cover the whole plugin.
-#define PLUG_WIDTH 1180
-#define PLUG_HEIGHT 780
-#define NR_BROWSER_COLUMN_WIDTH 520.f
+// anything IGraphics paints -- the platform gives no way around that. Putting it
+// along the bottom edge means the region it owns is the region nothing else
+// needs, and it can be collapsed away when the rig is what matters.
+#define PLUG_WIDTH 1120
+#define PLUG_HEIGHT 940
+#define NR_BROWSER_HEIGHT 260.f
+#define NR_BROWSER_HEADER_HEIGHT 34.f
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0
