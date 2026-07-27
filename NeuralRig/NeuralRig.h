@@ -410,6 +410,10 @@ private:
   // polls it from OnIdle.
   nr::net::BrowserController mBrowser;
 
+  // Which slot the browser is filling. Set by the slot's globe button, read
+  // when a card is clicked, so one panel serves every slot.
+  int mBrowserTargetSlot = 0;
+
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the
   // audio thread reads, so the path is parked here and picked up on the message

@@ -16,7 +16,7 @@
 #include "architecture.hpp"
 
 #include "NeuralRigControls.h"
-#include "T3KBrowserControl.h"
+#include "T3KBrowserPanel.h"
 #include "Theme.h"
 
 using namespace iplug;
@@ -315,10 +315,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // find the file by hand.
       // The globe opens the floating browser aimed at this slot, so whatever is
       // picked lands in the row that was clicked.
-      auto browseForSlot = [pGraphics, slot](IControl*) {
-        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
-        page->SetTargetSlot(static_cast<int>(slot));
-        page->OpenBrowser();
+      auto browseForSlot = [this, pGraphics, slot](IControl*) {
+        mBrowserTargetSlot = static_cast<int>(slot);
+
+        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        {
+          panel->Hide(false);
+          panel->SetDirty(false);
+        }
       };
 
       pGraphics->AttachControl(
@@ -394,22 +398,41 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
                       kCtrlTagSettingsBox)
       ->Hide(true);
 
-    // TONE3000 browser, and the button that opens it.
+    // TONE3000 browser. Docked across the bottom and hidden until asked for.
+    //
+    // The old embedded web view had to float, be movable and be resizable,
+    // because a native web view draws over the IGraphics surface rather than
+    // into it: it could not be docked without either stealing space permanently
+    // or being too small to browse in. This one is drawn by IGraphics like
+    // everything else, so it can simply take the lower half when open and
+    // give it back when closed.
     {
-      auto* browserPage = new T3KBrowserPageControl(b, mBrowser, style);
+      auto* browserPanel = new nr::browser::T3KBrowserPanel(
+        b.GetFromBottom(b.H() * 0.58f), mBrowser,
+        [this](int rowIndex, const nr::net::BrowserController::Row& row) {
+          const int slot = mBrowserTargetSlot;
 
-      browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
-        // Called from a worker thread. Park the path and let OnIdle stage it on
-        // the message thread rather than touching model state from here.
-        std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-        mPendingLoads.emplace_back(slot, std::string(filePath));
-      });
+          // Local rows are already on disk. Downloading them again would ask
+          // the API for a tone id the Local tab does not even have.
+          if (!row.localPath.empty())
+          {
+            std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+            mPendingLoads.emplace_back(slot, row.localPath);
+            return;
+          }
 
-      // Floats above the rig, closed until asked for. A native web view always
-      // draws over the IGraphics surface, so it cannot be docked without either
-      // stealing space permanently or being too small to browse in; letting the
-      // user move, resize and close it is what makes that liveable.
-      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser);
+          mBrowser.DownloadRow(rowIndex, [this, slot](bool success, std::string pathOrError) {
+            if (!success)
+              return;
+
+            // Called from a worker thread. Park the path and let OnIdle stage
+            // it on the message thread rather than touching model state here.
+            std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+            mPendingLoads.emplace_back(slot, pathOrError);
+          });
+        });
+
+      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(true);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -598,14 +621,15 @@ void NeuralRig::OnIdle()
       filePath.Set(path.c_str());
       _StageModel(static_cast<size_t>(slot), filePath);
 
-      // Take the browser off TONE3000's "you can close this tab" page, which is
-      // a dead end in a plugin with no tabs.
+      // Close the browser once a capture lands: the user asked for one, they
+      // got it, and leaving the panel covering the rig hides the thing they
+      // just changed.
       if (auto* pGraphics = GetUI())
       {
-        if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
         {
-          const std::string label = "slot " + std::to_string(slot + 1);
-          page->As<T3KBrowserPageControl>()->OnCaptureLoaded(label.c_str());
+          panel->Hide(true);
+          pGraphics->SetAllControlsDirty();
         }
       }
     }
@@ -636,15 +660,14 @@ void NeuralRig::OnIdle()
     }
   }
 
-  // Repaint the browser only when something actually changed, rather than at
-  // idle rate.
-  if (mBrowser.ConsumeDirty())
+  // The panel owns the dirty check: it calls ConsumeDirty itself and repaints
+  // only when the controller reports a change. Testing the flag here as well
+  // would swallow the notification, and whichever of the two ran first would
+  // leave the other permanently stale.
+  if (auto* pGraphics = GetUI())
   {
-    if (auto* pGraphics = GetUI())
-    {
-      if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-        page->As<T3KBrowserPageControl>()->Refresh();
-    }
+    if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+      static_cast<nr::browser::T3KBrowserPanel*>(panel)->Poll();
   }
 
   if (mNewModelLoadedInDSP)
