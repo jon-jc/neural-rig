@@ -174,7 +174,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
-    const auto titleArea = headerArea.GetFromLeft(320.f).GetHShifted(130.f);
+    // The header is divided into lanes that cannot overlap, rather than each
+    // element being centred or anchored independently and hoping they miss.
+    // Left to right: File and Options, the wordmark, the preset bar, then the
+    // window buttons. The wordmark used to run to x=464 while the preset bar
+    // began at x=370, so the two collided and the model icon sat on top of the
+    // word PRESETS.
+    const auto titleArea = headerArea.GetReducedFromLeft(140.f).GetFromLeft(286.f);
     // Caption-bar buttons, right to left in the usual order. No maximise: the
     // layout holds one size, so offering one would be a button that lies.
     const auto closeButtonArea = headerArea.GetFromRight(30.f).GetMidVPadded(15.f);
@@ -185,7 +191,9 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto fileMenuArea = headerArea.GetFromLeft(58.f).GetMidVPadded(13.f);
     const auto optionsMenuArea = fileMenuArea.GetHShifted(62.f);
     const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-76.f).GetMidVPadded(17.f);
-    const auto presetBarArea = headerArea.GetMidHPadded(190.f).GetMidVPadded(15.f);
+    // Between the wordmark's lane and the window buttons', not centred on the
+    // window -- centring is what walked it into the title.
+    const auto presetBarArea = headerArea.GetReducedFromLeft(456.f).GetReducedFromRight(146.f).GetMidVPadded(15.f);
 
     // Section heights are derived from what they hold rather than guessed. The
     // FX group previously got less than a knob row plus a toggle row, so the
@@ -317,11 +325,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // the palette lives in one place.
     pGraphics->AttachControl(new nr::theme::ChassisControl(b));
 
+    // Decorative only. It covers the whole window, so leaving it interactive
+    // put it on top of anything attached before it and swallowed those clicks
+    // -- which is exactly what stopped the header drag from working.
+    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap))->SetIgnoreMouse(true);
+
     // Stands in for the caption bar the borderless window no longer has.
-    // Attached before the header's own controls so they receive their clicks
-    // first and only bare header space starts a drag.
+    // Attached after the backdrop so it is above it, but before the header's
+    // own controls so those take their clicks first and only bare header space
+    // starts a drag.
     pGraphics->AttachControl(new nr::shell::WindowDragControl(headerArea));
-    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
