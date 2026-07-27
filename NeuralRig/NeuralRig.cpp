@@ -191,7 +191,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // A rig reads left to right: what the signal hits first is leftmost, and
     // the controls that shape all of it sit underneath in a single row.
     const auto slotCardHeight = 146.f;
-    const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + switchHeight + groupChrome + 12.f;
+    const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + toggleBlockHeight + groupChrome + 12.f;
     const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
     remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
 
@@ -204,9 +204,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto stage = rigInner.GetReducedFromLeft(34.f).GetReducedFromRight(34.f);
 
+    // Four cards: the three capture slots plus the cabinet IR, which is not a
+    // capture slot but is one more thing in the signal path and was invisible
+    // anywhere else.
+    constexpr int kNumCards = static_cast<int>(kNumSlots) + 1;
+
     const auto slotRowArea = stage.GetFromTop(slotCardHeight);
-    auto slotArea = [&](size_t slot) {
-      return slotRowArea.GetGridCell(0, static_cast<int>(slot), 1, static_cast<int>(kNumSlots)).GetPadded(-6.f);
+    auto slotArea = [&](int card) {
+      return slotRowArea.GetGridCell(0, card, 1, kNumCards).GetPadded(-5.f);
     };
 
     const auto knobsArea = stage.GetReducedFromTop(slotCardHeight + 14.f).GetFromTop(NAM_KNOB_HEIGHT);
@@ -223,15 +228,20 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Below the knob *and* its value text. Placing it at NAM_KNOB_HEIGHT put
     // the switches on top of the readouts, which is why the captions were
     // sliced in half by the browser panel's top edge.
-    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(switchHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
+    // NAMSwitchControl draws its caption inside its own bounds, so each toggle
+    // needs the whole block rather than just the switch: given only the switch
+    // height the caption lands on top of the switch and both become awkward to
+    // hit. Wider cells too -- these were 38px of usable target.
+    const auto toggleRow =
+      stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(toggleBlockHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(16.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(16.f);
 
     // The IR toggle belongs in the toggle row with the others, not on the cab
     // card. Putting it on the card meant it drew over the card's own clear
     // button and covered the capture name, so the cab slot could not be read
     // or cleared once something was loaded.
-    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(38.f);
+    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidVPadded(4.f).GetMidHPadded(30.f);
     const auto irArea = irSwitchArea;
 
     // The BROWSER handle, centred under the rig where the panel will appear.
@@ -306,14 +316,15 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // One card per stage. Clicking anywhere on a card opens the browser
     // already filtered to what can go in it, so choosing a pedal never means
     // scrolling past amps first.
-    static constexpr nr::rig::SlotKind kSlotKinds[kNumSlots] = {
-      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab};
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {
+      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab, nr::rig::SlotKind::IR};
 
-    for (size_t slot = 0; slot < kNumSlots; slot++)
+    for (int card = 0; card < kNumCards; card++)
     {
-      const auto kind = kSlotKinds[slot];
+      const auto kind = kSlotKinds[card];
+      const bool isIR = kind == nr::rig::SlotKind::IR;
 
-      auto browseForSlot = [this, pGraphics, kind](int slotIndex) {
+      auto browseForSlot = [this, pGraphics, kind, isIR](int slotIndex) {
         mBrowserTargetSlot = slotIndex;
 
         auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
@@ -323,18 +334,25 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
         panel->Hide(false);
 
-        const auto gears = nr::rig::SlotGears(kind);
         std::string joined;
 
-        for (const auto& gear : gears)
+        for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
-        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind));
+        // An IR is a format rather than a gear, so it filters on format with
+        // the gear left open. The cab slot pins format=nam for the opposite
+        // reason: gear=cab alone returns mostly impulse responses, which is
+        // what made picking a cab capture feel like the filter was wrong.
+        const char* format = isIR ? "ir" : (kind == nr::rig::SlotKind::Cab ? "nam" : "");
+
+        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
       };
 
-      auto clearSlot = [this](int slotIndex) {
-        SendArbitraryMsgFromUI(kMsgTagClearModel, ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0, nullptr);
+      auto clearSlot = [this, isIR](int slotIndex) {
+        SendArbitraryMsgFromUI(isIR ? kMsgTagClearIR : kMsgTagClearModel,
+                               isIR ? kCtrlTagIRFileBrowser : ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0,
+                               nullptr);
       };
 
       auto dropOnSlot = [this](int slotIndex, const char* path) {
@@ -342,27 +360,27 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         std::transform(extension.begin(), extension.end(), extension.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        if (extension == ".nam")
+        // The file decides where it goes, not the card it landed on: a .wav is
+        // an impulse response wherever you drop it.
+        if (extension == ".wav")
         {
-          // Same route the browser's downloads take, so a dropped capture and a
-          // downloaded one are staged identically.
-          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-          mPendingLoads.emplace_back(slotIndex, std::string(path));
-        }
-        else if (extension == ".wav")
-        {
-          // An impulse response is the cabinet, not a slot capture, so it goes
-          // to the IR loader whichever card it was dropped on.
           WDL_String irPath;
           irPath.Set(path);
           _LoadIRWithFeedback(irPath);
         }
+        else if (extension == ".nam" && slotIndex < static_cast<int>(kNumSlots))
+        {
+          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+          mPendingLoads.emplace_back(slotIndex, std::string(path));
+        }
       };
 
-      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(slot), static_cast<int>(slot), kind,
-                                                           SlotActiveParam(slot), browseForSlot, clearSlot,
-                                                           dropOnSlot),
-                               ModelBrowserCtrlTag(slot));
+      const int activeParam = isIR ? kIRToggle : SlotActiveParam(static_cast<size_t>(card));
+      const int tag = isIR ? kCtrlTagIRFileBrowser : ModelBrowserCtrlTag(static_cast<size_t>(card));
+
+      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(card), card, kind, activeParam, browseForSlot,
+                                                          clearSlot, dropOnSlot),
+                               tag);
     }
 
     auto hideSlimOverlay = [](IControl* pCaller) {
@@ -768,6 +786,23 @@ void NeuralRig::OnIdle()
         }
 
         static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+      }
+    }
+
+    // The IR card, same idea. Tracked separately because the IR is not a
+    // capture slot and does not live in mNAMPaths.
+    {
+      const bool occupied = mIRPath.GetLength() > 0;
+
+      if (occupied != mIROccupancy)
+      {
+        mIROccupancy = occupied;
+
+        if (auto* card = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
+        {
+          const std::string name = occupied ? std::filesystem::path(mIRPath.Get()).stem().string() : std::string{};
+          static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+        }
       }
     }
   }

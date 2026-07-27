@@ -32,6 +32,12 @@ enum class SlotKind
   Pedal,
   Amp,
   Cab,
+
+  /// The cabinet impulse response. Not a capture slot: it is a .wav convolved
+  /// after the chain, so it has its own parameter and its own loader. It gets a
+  /// card because from the player's side it is one more thing in the signal
+  /// path, and having it anywhere else made it invisible.
+  IR,
 };
 
 inline const char* SlotLabel(SlotKind kind)
@@ -41,6 +47,7 @@ inline const char* SlotLabel(SlotKind kind)
     case SlotKind::Pedal: return "PEDAL";
     case SlotKind::Amp: return "AMP";
     case SlotKind::Cab: return "CAB";
+    case SlotKind::IR: return "IR";
   }
 
   return "SLOT";
@@ -55,6 +62,7 @@ inline const char* SlotPlaceholder(SlotKind kind)
     case SlotKind::Pedal: return "Select a Pedal from the browser";
     case SlotKind::Amp: return "Select an Amp from the browser";
     case SlotKind::Cab: return "Select a Cab from the browser";
+    case SlotKind::IR: return "Select an IR from the browser";
   }
 
   return "Select a capture from the browser";
@@ -67,6 +75,7 @@ inline IColor SlotAccent(SlotKind kind)
     case SlotKind::Pedal: return PluginColors::GEAR_PEDAL;
     case SlotKind::Amp: return PluginColors::GEAR_AMP_CAB;
     case SlotKind::Cab: return PluginColors::GEAR_CAB;
+    case SlotKind::IR: return PluginColors::GEAR_SPACE;
   }
 
   return PluginColors::GEAR_OTHER;
@@ -82,6 +91,7 @@ inline std::vector<std::string> SlotGears(SlotKind kind)
     case SlotKind::Pedal: return {"pedal"};
     case SlotKind::Amp: return {"amp", "amp-cab"};
     case SlotKind::Cab: return {"cab"};
+    case SlotKind::IR: return {};
   }
 
   return {};
@@ -157,7 +167,9 @@ public:
       g.DrawText(hint, SlotPlaceholder(mKind), mTitleRect);
 
       const IText sub(12.f, PluginColors::INK_DIM, nullptr, EAlign::Near, EVAlign::Middle);
-      g.DrawText(sub, "Alternatively, drop a NAM or IR file here", mSubtitleRect);
+      g.DrawText(sub, mKind == SlotKind::IR ? "Alternatively, drop a .wav IR here"
+                                     : "Alternatively, drop a NAM file here",
+                 mSubtitleRect);
     }
   }
 

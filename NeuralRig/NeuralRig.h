@@ -426,6 +426,10 @@ private:
   // when a card is clicked, so one panel serves every slot.
   int mBrowserTargetSlot = 0;
 
+  /// Whether the IR card currently shows a file, so its name is only pushed
+  /// when it actually changes rather than every idle tick.
+  bool mIROccupancy = false;
+
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the
   // audio thread reads, so the path is parked here and picked up on the message
