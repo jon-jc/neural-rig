@@ -430,54 +430,71 @@
 		4FFBB93420863B0E00DDD0E7 /* coreiids.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F8158E0205D50EB00393585 /* coreiids.cpp */; };
 		4FFBB93520863B0E00DDD0E7 /* vstnoteexpressiontypes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F81588E205D50EB00393585 /* vstnoteexpressiontypes.cpp */; };
 		AA341E1D2B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		E95177500904F39724FA33E6 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		4620C42062F3C14A3FC3AE1E /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		5361924B4F2ADB6021C928CE /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		68EE50220E658A732B0D289B /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		AFCA3A4D92787C3FEABD4A2E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		FCF825E54F60F6D2E7F80364 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		915DC9959367F8E09C67D4D0 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E1F2B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		53EFADA4D42954AA08A0680F /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		85AA3B6A641CD2A5288F1D76 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		8B0BF5363C4AE38DC1462489 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		1143CEBFF16E0F90A21FE880 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		11E4AA30FAC6023C82AA4C14 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		1F301008139CE06B999AE5D8 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		35BF3BDA3D6A89EDF1CF93E9 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E202B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		EBE1C0F2A2DC2F5518BF3A45 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		6288EF0F0DC61F115807A778 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		F502DCD481DE018180F14BEA /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		D4578DD18D248873427CD9DC /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		3E5DF653A28978E40DE9CEB3 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		36251DAF3BA8CB32A8AB8308 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		6ABD568451BDE68439729213 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E212B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		E68415BDFE34AAFC64304819 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		3B02BD799E153BC94CAD7DC9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		646F37E44379E47E303DC633 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		19A22A1437BC1C92E675FCCF /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		0974605EBF5C26A2CADB3431 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		94109CA4E5D6F1D543077AFF /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		3CE855990F3FA702F2FF0F50 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E222B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		DB2713B9708E0A87D6DD795F /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		FDAFFF4B7952638CB09463E3 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		0ACEDE1CE29A04E2F0B056E9 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		393FC449EA5771064EB34517 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		53B900D56BE14073713F8C54 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		994BEDE114DFFB544BB02EA4 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		0366EA97872C86AEBB864761 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E232B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		57CC9CED887BAA97F8841B3B /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		EF097509D9ADA296B4D042EA /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		614FE9F564E2BF5BA594D1D2 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		54063A69E0FAA9A1CED4977F /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		095707B9CB4982BB9AEB4A4E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		C7E76FB7870EE24EEBB7A720 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		86239D5BFC40E1180C4C7581 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E242B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		180C2D8687783D603BADB0B9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		D991D586EFD288174230C1A5 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		FE0AF98B7469415DFC6F1897 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		11ED27A340F7E84AFDD4184E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		4C12492B977B2C17AEE48516 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		F9D0A4CCE78813DF28D28C48 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E252B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		DDCAC5DDB970CE999F049001 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		DF11CE03058333F326AAEA45 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		918455EEDA8D80CCEEF46862 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		4A0807C781B683E30972F44F /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		D0235C00800DE1A98693B933 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		E58C8C6120D8D0633E1F0296 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		0512A454660C358604AE5953 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E262B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
+		55A73B3FDBEF4B7413B8E2D5 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
+		C8E780522161096EEFDF8FBD /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
 		0577AD3050B7E59AB8F81FDB /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		C6C610A39385531947BB8EBE /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		71534EE8691510CB18EEBD04 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -1076,6 +1093,8 @@
 		4FFF72B8214BB71400839091 /* main.rc */ = {isa = PBXFileReference; lastKnownFileType = text; name = main.rc; path = ../resources/main.rc; sourceTree = "<group>"; };
 		52FBBED30D0CF143001C8B8A /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.c.h; name = config.h; path = ../config.h; sourceTree = "<group>"; tabWidth = 2; usesTabs = 0; };
 		AA341E1B2B9E5A530069C260 /* ToneStack.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ToneStack.cpp; path = ../ToneStack.cpp; sourceTree = "<group>"; };
+		001832C0FD27E73AFA308A0F /* linear.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = linear.cpp; path = ../../NeuralAmpModelerCore/NAM/linear.cpp; sourceTree = "<group>"; };
+		BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = IPlugWebView.mm; path = ../../iPlug2/IPlug/Extras/WebView/IPlugWebView.mm; sourceTree = "<group>"; };
 		8645DD8DD7291253F750E980 /* BrowserController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = BrowserController.cpp; path = ../net/BrowserController.cpp; sourceTree = "<group>"; };
 		3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = LoopbackServer.cpp; path = ../net/LoopbackServer.cpp; sourceTree = "<group>"; };
 		532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Tone3000Client.cpp; path = ../net/Tone3000Client.cpp; sourceTree = "<group>"; };
@@ -1172,6 +1191,8 @@
 				4F3862ED2014BBEC0009F402 /* NeuralRig.cpp */,
 				4F9979232A066F8B0066545C /* NeuralRigControls.h */,
 				AA341E1B2B9E5A530069C260 /* ToneStack.cpp */,
+				001832C0FD27E73AFA308A0F /* linear.cpp */,
+				BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */,
 				8645DD8DD7291253F750E980 /* BrowserController.cpp */,
 				3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */,
 				532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */,
@@ -2635,6 +2656,8 @@
 				4F2FB1AC2A0047430027AB66 /* lstm.cpp in Sources */,
 				4F2FB1B82A0047430027AB66 /* activations.cpp in Sources */,
 				AA341E232B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				57CC9CED887BAA97F8841B3B /* linear.cpp in Sources */,
+				EF097509D9ADA296B4D042EA /* IPlugWebView.mm in Sources */,
 				614FE9F564E2BF5BA594D1D2 /* BrowserController.cpp in Sources */,
 				54063A69E0FAA9A1CED4977F /* LoopbackServer.cpp in Sources */,
 				095707B9CB4982BB9AEB4A4E /* Tone3000Client.cpp in Sources */,
@@ -2662,6 +2685,8 @@
 				4F6369E020A464BB0022C370 /* IGraphicsNanoVG_src.m in Sources */,
 				4F6369EE20A466470022C370 /* IControl.cpp in Sources */,
 				AA341E202B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				EBE1C0F2A2DC2F5518BF3A45 /* linear.cpp in Sources */,
+				6288EF0F0DC61F115807A778 /* IPlugWebView.mm in Sources */,
 				F502DCD481DE018180F14BEA /* BrowserController.cpp in Sources */,
 				D4578DD18D248873427CD9DC /* LoopbackServer.cpp in Sources */,
 				3E5DF653A28978E40DE9CEB3 /* Tone3000Client.cpp in Sources */,
@@ -2752,6 +2777,8 @@
 				4F2FB1712A0047430027AB66 /* NoiseGate.cpp in Sources */,
 				4F3EE1E2231438D000004786 /* IGraphicsEditorDelegate.cpp in Sources */,
 				AA341E262B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				55A73B3FDBEF4B7413B8E2D5 /* linear.cpp in Sources */,
+				C8E780522161096EEFDF8FBD /* IPlugWebView.mm in Sources */,
 				0577AD3050B7E59AB8F81FDB /* BrowserController.cpp in Sources */,
 				C6C610A39385531947BB8EBE /* LoopbackServer.cpp in Sources */,
 				71534EE8691510CB18EEBD04 /* Tone3000Client.cpp in Sources */,
@@ -2791,6 +2818,8 @@
 				4F78BE2422E7406D00AD537E /* IPlugAUViewController.mm in Sources */,
 				4F2FB1982A0047430027AB66 /* dsp.cpp in Sources */,
 				AA341E252B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				DDCAC5DDB970CE999F049001 /* linear.cpp in Sources */,
+				DF11CE03058333F326AAEA45 /* IPlugWebView.mm in Sources */,
 				918455EEDA8D80CCEEF46862 /* BrowserController.cpp in Sources */,
 				4A0807C781B683E30972F44F /* LoopbackServer.cpp in Sources */,
 				D0235C00800DE1A98693B933 /* Tone3000Client.cpp in Sources */,
@@ -2861,6 +2890,8 @@
 				4F2FB1A82A0047430027AB66 /* lstm.cpp in Sources */,
 				4F7C495C255DDFC400DF7588 /* IPopupMenuControl.cpp in Sources */,
 				AA341E1F2B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				53EFADA4D42954AA08A0680F /* linear.cpp in Sources */,
+				85AA3B6A641CD2A5288F1D76 /* IPlugWebView.mm in Sources */,
 				8B0BF5363C4AE38DC1462489 /* BrowserController.cpp in Sources */,
 				1143CEBFF16E0F90A21FE880 /* LoopbackServer.cpp in Sources */,
 				11E4AA30FAC6023C82AA4C14 /* Tone3000Client.cpp in Sources */,
@@ -2921,6 +2952,8 @@
 				4F3862F32014BBEC0009F402 /* NeuralRig.cpp in Sources */,
 				4F2FB1952A0047430027AB66 /* dsp.cpp in Sources */,
 				AA341E212B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				E68415BDFE34AAFC64304819 /* linear.cpp in Sources */,
+				3B02BD799E153BC94CAD7DC9 /* IPlugWebView.mm in Sources */,
 				646F37E44379E47E303DC633 /* BrowserController.cpp in Sources */,
 				19A22A1437BC1C92E675FCCF /* LoopbackServer.cpp in Sources */,
 				0974605EBF5C26A2CADB3431 /* Tone3000Client.cpp in Sources */,
@@ -2960,6 +2993,7 @@
 				4FC3EFCE2086C35D00BD11FA /* IPlugPluginBase.cpp in Sources */,
 				4F7C4965255DDFC800DF7588 /* IPopupMenuControl.cpp in Sources */,
 				AA341E242B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				180C2D8687783D603BADB0B9 /* IPlugWebView.mm in Sources */,
 				D991D586EFD288174230C1A5 /* BrowserController.cpp in Sources */,
 				FE0AF98B7469415DFC6F1897 /* LoopbackServer.cpp in Sources */,
 				11ED27A340F7E84AFDD4184E /* Tone3000Client.cpp in Sources */,
@@ -3025,6 +3059,8 @@
 				4F2FB1692A0047430027AB66 /* NoiseGate.cpp in Sources */,
 				4F8C10E020BA2796006320CD /* IGraphicsEditorDelegate.cpp in Sources */,
 				AA341E1D2B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				E95177500904F39724FA33E6 /* linear.cpp in Sources */,
+				4620C42062F3C14A3FC3AE1E /* IPlugWebView.mm in Sources */,
 				5361924B4F2ADB6021C928CE /* BrowserController.cpp in Sources */,
 				68EE50220E658A732B0D289B /* LoopbackServer.cpp in Sources */,
 				AFCA3A4D92787C3FEABD4A2E /* Tone3000Client.cpp in Sources */,
@@ -3064,6 +3100,8 @@
 				4FFBB91520863B0E00DDD0E7 /* timer.cpp in Sources */,
 				4F2FB1B72A0047430027AB66 /* activations.cpp in Sources */,
 				AA341E222B9E5A530069C260 /* ToneStack.cpp in Sources */,
+				DB2713B9708E0A87D6DD795F /* linear.cpp in Sources */,
+				FDAFFF4B7952638CB09463E3 /* IPlugWebView.mm in Sources */,
 				0ACEDE1CE29A04E2F0B056E9 /* BrowserController.cpp in Sources */,
 				393FC449EA5771064EB34517 /* LoopbackServer.cpp in Sources */,
 				53B900D56BE14073713F8C54 /* Tone3000Client.cpp in Sources */,
