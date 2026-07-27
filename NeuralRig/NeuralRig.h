@@ -35,20 +35,6 @@ constexpr size_t kNumSlots = 3;
 // never allocates. Resampling latency is a few hundred samples at most.
 constexpr size_t kBypassDelayCapacity = 8192;
 
-/// Window height with the browser closed: header, rig, the BROWSER handle and
-/// the status strip, and nothing else. Opening the browser grows the window to
-/// PLUG_HEIGHT rather than overlaying the rig, so the catalogue never covers
-/// the thing you are loading into.
-///
-/// Derived from the layout's own terms -- 14 padding, 54 header, 410 rig, 10
-/// gap, 36 handle, 38 status, 14 padding -- with a little slack. This is the
-/// plugin's default size, so it is PLUG_HEIGHT.
-constexpr int kCollapsedHeight = PLUG_HEIGHT;
-
-/// Height with the browser open. Tall enough to show a useful number of cards
-/// without exceeding a 1080p screen once window chrome is accounted for.
-constexpr int kExpandedHeight = 980;
-
 class NAMSender : public iplug::IPeakAvgSender<>
 {
 public:
@@ -260,6 +246,11 @@ public:
   void OnReset() override;
   void OnIdle() override;
 
+  /// The window was resized by the platform -- a frame drag, or maximising.
+  /// Scales the UI to fit rather than leaving it at its original size in the
+  /// corner.
+  void OnParentWindowResize(int width, int height) override;
+
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void OnUIOpen() override;
@@ -448,11 +439,7 @@ private:
   /// resizing re-runs the layout function, which rebuilds every control.
   bool mBrowserOpen = false;
 
-  /// Height the window should become, applied from OnIdle. Resizing rebuilds
-  /// every control, so doing it from a control's own mouse handler destroys
-  /// that control while its method is still on the stack. Zero means nothing
-  /// pending.
-  int mPendingResizeHeight = 0;
+
 
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the

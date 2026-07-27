@@ -127,10 +127,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
   mLayoutFunc = [&](IGraphics* pGraphics) {
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
 
-    // Resizing has to rebuild the layout, not just scale it: the browser
-    // changes the window's height, and the sections above it must take the
-    // space back when it closes.
-    pGraphics->SetLayoutOnResize(true);
     pGraphics->AttachTextEntryControl();
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
@@ -164,11 +160,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
     // bottom here is reading the signal path. The browser floats above all of
     // it, so it takes no space here.
-    // The status strip is carved off first so nothing else can claim it and
-    // the browser panel has a hard floor to stop above.
-    const auto statusBarArea = b.GetFromBottom(38.f);
-
-    auto remaining = b.GetReducedFromBottom(38.f).GetPadded(-14.f);
+    // Everything is laid out once, for the *open* window height, and never
+    // re-laid out. Collapsing the browser shrinks the window instead, which is
+    // why the order here matters: the browser panel is last, below the status
+    // strip, so cutting the window off above it removes the browser and
+    // nothing else.
+    //
+    // Laying out again on resize was the earlier approach and it rebuilt every
+    // control -- which crashed when triggered from a control's own handler, and
+    // painted a blank window when it survived.
+    auto remaining = b.GetPadded(-14.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
@@ -256,6 +257,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto browserToggleArea = remaining.GetFromTop(30.f).GetMidHPadded(60.f);
     remaining = remaining.GetReducedFromTop(36.f);
 
+    // The status strip sits above the browser rather than below it, so the
+    // catalogue is the last thing in the window and never separates the rig
+    // from its readouts.
+    const auto statusBarArea = remaining.GetFromTop(38.f);
+
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
     const auto slimIconArea =
@@ -342,11 +348,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
         panel->Hide(false);
 
-        if (!mBrowserOpen)
-        {
-          mBrowserOpen = true;
-          mPendingResizeHeight = kExpandedHeight;
-        }
+        mBrowserOpen = true;
 
         std::string joined;
 
@@ -480,7 +482,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // window. A fixed 58% overlapped the bottom of the rig, hiding the cab
       // slot and the knob row behind it; deriving the top from the layout means
       // the two can never collide however the sections above are tuned.
-      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, statusBarArea.T);
+      const auto browserPanelArea = IRECT(b.L, statusBarArea.B + 10.f, b.R, b.B);
 
       auto* browserPanel = new nr::browser::T3KBrowserPanel(
         browserPanelArea, mBrowser,
@@ -516,17 +518,15 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           [this, pGraphics](bool open) {
             mBrowserOpen = open;
 
-            // Grow the window instead of overlaying: the catalogue covering the
-            // slot you are loading into was the original complaint about the
-            // old web view, and overlaying reproduces it.
-            //
-            // Requested rather than done here. Resizing rebuilds every control,
-            // and this lambda is running inside one of them.
-            mPendingResizeHeight = open ? kExpandedHeight : kCollapsedHeight;
+            if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+              panel->Hide(!open);
+
+            pGraphics->SetAllControlsDirty();
           }),
         kCtrlTagBrowserToggle);
 
       pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
+
 
       // Presets save the whole rig, so they go through the plugin's own
       // state serialization rather than a second format that would drift
@@ -730,23 +730,30 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
   _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
 }
 
+void NeuralRig::OnParentWindowResize(int width, int height)
+{
+  auto* pGraphics = GetUI();
+
+  if (pGraphics == nullptr || width <= 0 || height <= 0)
+    return;
+
+  // The logical size stays fixed and the scale absorbs the difference, which is
+  // what keeps every rect, knob and font in proportion instead of leaving a
+  // fixed-size UI in the corner of a maximised window.
+  const float fitX = static_cast<float>(width) / static_cast<float>(PLUG_WIDTH);
+  const float fitY = static_cast<float>(height) / static_cast<float>(PLUG_HEIGHT);
+
+  // Fit, not fill: the smaller ratio keeps the whole UI on screen.
+  const float scale = std::clamp(std::min(fitX, fitY), 0.25f, 4.0f);
+
+  // needsPlatformResize is false because the platform has already resized us.
+  // Asking it to resize again is the feedback loop that previously ran the
+  // window away a little further on every tick.
+  pGraphics->Resize(PLUG_WIDTH, PLUG_HEIGHT, scale, false);
+}
+
 void NeuralRig::OnIdle()
 {
-  // Apply a requested window resize here, where no control's method is on the
-  // stack. Doing it from a control's handler rebuilds the control tree and
-  // frees the object that is still executing.
-  if (mPendingResizeHeight > 0)
-  {
-    const int height = mPendingResizeHeight;
-    mPendingResizeHeight = 0;
-
-    if (auto* pGraphics = GetUI())
-      pGraphics->Resize(PLUG_WIDTH, height, pGraphics->GetDrawScale(), true);
-
-    // The rebuild replaced everything this tick would have touched.
-    return;
-  }
-
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -788,11 +795,12 @@ void NeuralRig::OnIdle()
       // just changed.
       if (auto* pGraphics = GetUI())
       {
-        if (mBrowserOpen)
-        {
-          mBrowserOpen = false;
-          mPendingResizeHeight = kCollapsedHeight;
-        }
+        mBrowserOpen = false;
+
+        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+          panel->Hide(true);
+
+        pGraphics->SetAllControlsDirty();
       }
     }
   }

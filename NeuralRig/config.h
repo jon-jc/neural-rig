@@ -37,9 +37,7 @@
 // anything IGraphics paints. Docking it either steals space permanently or is
 // too small to browse in, so it floats and gets out of the way on demand.
 #define PLUG_WIDTH 1120
-// The default size is the rig with the browser closed. Opening the browser
-// grows the window past this; PLUG_MAX_HEIGHT leaves ample room for that.
-#define PLUG_HEIGHT 600
+#define PLUG_HEIGHT 880
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 // The host (and the standalone's own window frame) may resize us, which is
