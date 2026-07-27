@@ -174,11 +174,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
-    const auto titleArea = headerArea.GetFromLeft(320.f);
+    const auto titleArea = headerArea.GetFromLeft(320.f).GetHShifted(130.f);
     // Caption-bar buttons, right to left in the usual order. No maximise: the
     // layout holds one size, so offering one would be a button that lies.
     const auto closeButtonArea = headerArea.GetFromRight(30.f).GetMidVPadded(15.f);
     const auto minimiseButtonArea = closeButtonArea.GetHShifted(-36.f);
+
+    // File and Options, where the OS menu bar used to be but inside the
+    // plugin's own surface so they follow the theme.
+    const auto fileMenuArea = headerArea.GetFromLeft(58.f).GetMidVPadded(13.f);
+    const auto optionsMenuArea = fileMenuArea.GetHShifted(62.f);
     const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-76.f).GetMidVPadded(17.f);
     const auto presetBarArea = headerArea.GetMidHPadded(190.f).GetMidVPadded(15.f);
 
@@ -542,6 +547,9 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         new nr::shell::WindowButtonControl(minimiseButtonArea, nr::shell::WindowButton::Minimise));
       pGraphics->AttachControl(new nr::shell::WindowButtonControl(closeButtonArea, nr::shell::WindowButton::Close));
 
+      pGraphics->AttachControl(new nr::shell::WindowMenuControl(fileMenuArea, "File", true));
+      pGraphics->AttachControl(new nr::shell::WindowMenuControl(optionsMenuArea, "Options", false));
+
 
       // Presets save the whole rig, so they go through the plugin's own
       // state serialization rather than a second format that would drift
@@ -747,6 +755,14 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
 
 void NeuralRig::OnIdle()
 {
+  // Once, after the window exists. Doing it during layout is too early -- the
+  // top-level window is not final yet.
+  if (!mNativeMenuRemoved)
+  {
+    mNativeMenuRemoved = true;
+    nr::shell::RemoveNativeMenu(GetUI());
+  }
+
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 

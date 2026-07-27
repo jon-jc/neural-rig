@@ -48,6 +48,40 @@ inline HWND TopLevelWindow(IGraphics* pGraphics)
 }
 #endif
 
+/// Detaches the native menu bar from the window.
+///
+/// The MENU resource itself has to stay: removing it from the dialog template
+/// makes iPlug2's standalone exit at startup. Detaching it afterwards keeps the
+/// app happy and still gets rid of the unthemed strip, and File and Options are
+/// drawn in the header instead.
+inline void RemoveNativeMenu(IGraphics* pGraphics)
+{
+#if defined(APP_API) && defined(OS_WIN)
+  if (HWND window = TopLevelWindow(pGraphics))
+  {
+    if (GetMenu(window) != nullptr)
+    {
+      RECT frame{};
+      GetWindowRect(window, &frame);
+
+      SetMenu(window, nullptr);
+
+      // SWP_FRAMECHANGED alone leaves the window at its old height, still
+      // reserving the row the menu occupied, so take that row back explicitly.
+      //
+      // Measured from the window rather than from IGraphics: WindowWidth() is
+      // the logical size times the draw scale, which is not the platform size
+      // when the two disagree -- using it shrank the window to 747x587.
+      const int width = frame.right - frame.left;
+      const int height = (frame.bottom - frame.top) - GetSystemMetrics(SM_CYMENU);
+
+      SetWindowPos(window, nullptr, 0, 0, width, height,
+                   SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+  }
+#endif
+}
+
 /// Drags the window when the empty part of the header is dragged, standing in
 /// for the caption bar that is no longer there.
 class WindowDragControl : public IControl
@@ -65,16 +99,54 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
 #if defined(APP_API) && defined(OS_WIN)
-    // Hand the drag to the window manager rather than tracking the mouse
-    // ourselves: it gets snapping, multi-monitor and DPI changes right, and we
-    // would not.
-    if (HWND window = TopLevelWindow(GetUI()))
-    {
-      ReleaseCapture();
-      SendMessage(window, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-    }
+    // Tracked here rather than handed to the window manager via
+    // WM_NCLBUTTONDOWN/HTCAPTION. That is the usual trick, but it relies on the
+    // window having a caption to pretend the click landed in, and this one has
+    // none -- so it silently did nothing.
+    HWND window = TopLevelWindow(GetUI());
+
+    if (window == nullptr)
+      return;
+
+    RECT frame{};
+    GetWindowRect(window, &frame);
+    GetCursorPos(&mAnchor);
+
+    mOrigin = {frame.left, frame.top};
+    mDragging = true;
 #endif
   }
+
+  void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
+  {
+#if defined(APP_API) && defined(OS_WIN)
+    if (!mDragging)
+      return;
+
+    HWND window = TopLevelWindow(GetUI());
+
+    if (window == nullptr)
+      return;
+
+    // Against the screen cursor rather than accumulated deltas: the control
+    // moves with the window, so its own coordinates shift under the pointer
+    // and deltas would compound.
+    POINT now{};
+    GetCursorPos(&now);
+
+    SetWindowPos(window, nullptr, mOrigin.x + (now.x - mAnchor.x), mOrigin.y + (now.y - mAnchor.y), 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+#endif
+  }
+
+  void OnMouseUp(float x, float y, const IMouseMod& mod) override { mDragging = false; }
+
+private:
+#if defined(APP_API) && defined(OS_WIN)
+  POINT mAnchor{};
+  POINT mOrigin{};
+#endif
+  bool mDragging = false;
 };
 
 /// What a caption-bar button does. There is no maximise: the layout holds one
@@ -140,7 +212,10 @@ public:
       // Posted rather than sent: this runs from a mouse handler, and closing
       // the window tears down the graphics context underneath us.
       case WindowButton::Close: PostMessage(window, WM_CLOSE, 0, 0); break;
-      case WindowButton::Minimise: ShowWindow(window, SW_MINIMIZE); break;
+      // SC_MINIMIZE through the system menu rather than ShowWindow: on a
+        // borderless popup ShowWindow(SW_MINIMIZE) took the window down
+        // entirely instead of minimising it.
+      case WindowButton::Minimise: PostMessage(window, WM_SYSCOMMAND, SC_MINIMIZE, 0); break;
     }
 #endif
   }
@@ -160,6 +235,95 @@ public:
 private:
   WindowButton mButton;
   bool mHovered = false;
+};
+
+/// The standalone's File and Options menus, drawn in the header instead of in
+/// an OS menu bar. The bar was the last piece of unthemed chrome, and it sat
+/// outside the plugin's own surface.
+class WindowMenuControl : public IControl
+{
+public:
+  WindowMenuControl(const IRECT& bounds, const char* label, bool isFileMenu)
+  : IControl(bounds)
+  , mLabel(label)
+  , mIsFileMenu(isFileMenu)
+  {
+    mIgnoreMouse = !kOwnsWindow;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (!kOwnsWindow)
+      return;
+
+    if (mHovered)
+      g.FillRoundRect(PluginColors::AMBER.WithOpacity(0.12f), mRECT, 4.f);
+
+    const IText text(12.f, mHovered ? PluginColors::INK : PluginColors::INK_MUTED, nullptr, EAlign::Center,
+                     EVAlign::Middle);
+    g.DrawText(text, mLabel, mRECT);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    mMenu.Clear();
+
+    if (mIsFileMenu)
+    {
+      mMenu.AddItem("Audio Settings...");
+      mMenu.AddItem("Quit");
+    }
+    else
+    {
+      mMenu.AddItem("About NeuralRig");
+    }
+
+    GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pMenu, int valIdx) override
+  {
+#if defined(APP_API) && defined(OS_WIN)
+    if (pMenu == nullptr || pMenu->GetChosenItemIdx() < 0)
+      return;
+
+    HWND window = TopLevelWindow(GetUI());
+
+    if (window == nullptr)
+      return;
+
+    // The command ids the standalone's own handler already understands, so
+    // these open exactly the dialogs the menu bar used to.
+    constexpr WPARAM kAbout = 40005;
+    constexpr WPARAM kPreferences = 40006;
+    constexpr WPARAM kQuit = 40007;
+
+    const int chosen = pMenu->GetChosenItemIdx();
+
+    if (!mIsFileMenu)
+      PostMessage(window, WM_COMMAND, kAbout, 0);
+    else
+      PostMessage(window, WM_COMMAND, chosen == 0 ? kPreferences : kQuit, 0);
+#endif
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    mHovered = true;
+    SetDirty(false);
+  }
+
+  void OnMouseOut() override
+  {
+    mHovered = false;
+    SetDirty(false);
+  }
+
+private:
+  const char* mLabel;
+  bool mIsFileMenu;
+  bool mHovered = false;
+  IPopupMenu mMenu;
 };
 
 } // namespace nr::shell

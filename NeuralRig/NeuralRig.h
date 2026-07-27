@@ -435,6 +435,9 @@ private:
   /// resizing re-runs the layout function, which rebuilds every control.
   bool mBrowserOpen = false;
 
+  /// The native menu bar is detached once, from the first idle tick.
+  bool mNativeMenuRemoved = false;
+
 
 
   // Captures the browser has downloaded, waiting to be staged. The download
