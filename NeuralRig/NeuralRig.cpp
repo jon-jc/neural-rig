@@ -389,14 +389,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
-        // An IR is a format rather than a gear, so it filters on format with
-        // the gear left open. Nothing else pins a format: cab captures on
-        // TONE3000 are overwhelmingly impulse responses, so pinning format=nam
-        // on the cab card cut it down to almost nothing. Leaving it open is
-        // safe now that the IR card exists to ask for IRs specifically, and a
-        // .wav picked from the cab card still loads -- the file's extension
-        // decides where it goes, not the card it came from.
-        const char* format = isIR ? "ir" : "";
+        // An IR is a format rather than a gear, so the IR card filters on
+        // format with the gear left open -- it is the only way to ask for one.
+        //
+        // The cab card pins format=nam for the opposite reason: gear=cab alone
+        // returns mostly impulse responses, and those belong to the IR card.
+        // There are fewer NAM cab captures in the library, but they are what
+        // this card actually loads.
+        const char* format = isIR ? "ir" : (kind == nr::rig::SlotKind::Cab ? "nam" : "");
 
         static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
@@ -847,17 +847,20 @@ void NeuralRig::OnIdle()
       WDL_String filePath;
       filePath.Set(path.c_str());
 
-      // A downloaded impulse response is a .wav and belongs to the cabinet, not
-      // to a capture slot. Without this the browser's IR filter would download
-      // files that nothing ever loaded.
-      if (std::filesystem::path(path).extension() == ".wav")
-      {
+      std::string extension = std::filesystem::path(path).extension().string();
+      std::transform(extension.begin(), extension.end(), extension.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+      // A .wav is an impulse response and belongs to the cabinet. So does
+      // anything aimed at the IR card, which is card index kNumSlots and
+      // therefore not a capture slot at all -- staging into it would index
+      // past the end of the slot arrays.
+      const bool isIRTarget = slot >= static_cast<int>(kNumSlots);
+
+      if (extension == ".wav" || isIRTarget)
         _LoadIRWithFeedback(filePath);
-      }
-      else
-      {
+      else if (slot >= 0)
         _StageModel(static_cast<size_t>(slot), filePath);
-      }
 
       // Close the browser once a capture lands: the user asked for one, they
       // got it, and leaving the panel covering the rig hides the thing they

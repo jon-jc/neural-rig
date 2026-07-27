@@ -47,6 +47,40 @@ std::string SanitiseForFilename(const std::string& text)
 
   return safe.empty() ? "capture" : safe;
 }
+
+/// Where a downloaded model lands, and -- the part that matters -- under what
+/// extension.
+///
+/// Everything downstream decides whether a file is a capture or an impulse
+/// response by its extension. Writing every download as .nam meant a downloaded
+/// IR was handed to the NAM parser, which cannot read a WAV, so the IR and cab
+/// cards accepted a file and then did nothing with it.
+///
+/// The model URL wins when it carries an extension, since what is actually
+/// served is more reliable than the tone's declared format.
+std::string CacheFilePath(const std::string& directory, const std::string& title, const Model& model,
+                          const std::string& format)
+{
+  std::string extension = format == "ir" ? ".wav" : ".nam";
+
+  const auto dot = model.modelUrl.find_last_of('.');
+
+  if (dot != std::string::npos)
+  {
+    const auto tail = model.modelUrl.substr(dot);
+
+    if (tail == ".wav" || tail == ".nam")
+      extension = tail;
+  }
+
+#ifdef _WIN32
+  const auto separator = "\\";
+#else
+  const auto separator = "/";
+#endif
+
+  return directory + separator + SanitiseForFilename(title) + "-" + std::to_string(model.id) + extension;
+}
 } // namespace
 
 const char* StatusLabel(BrowserController::Status status)
@@ -607,7 +641,7 @@ void BrowserController::HandleOneSelection(LoopbackServer& loopback,
     SetStatus(Status::Working, "Fetching capture " + toneIt->second + "...");
 
     std::string pathOrError;
-    const bool ok = DownloadTone(toneId, "tone-" + toneIt->second, pathOrError);
+    const bool ok = DownloadTone(toneId, "tone-" + toneIt->second, {}, pathOrError);
 
     SetStatus(ok ? Status::Idle : Status::Failed,
               ok ? "Loaded into the chain" : ("Download failed: " + pathOrError));
@@ -617,7 +651,8 @@ void BrowserController::HandleOneSelection(LoopbackServer& loopback,
   }
 }
 
-bool BrowserController::DownloadTone(int toneId, const std::string& title, std::string& pathOrError)
+bool BrowserController::DownloadTone(int toneId, const std::string& title, const std::string& format,
+                                     std::string& pathOrError)
 {
   std::vector<Model> models;
   std::string error;
@@ -648,14 +683,7 @@ bool BrowserController::DownloadTone(int toneId, const std::string& title, std::
     return false;
   }
 
-#ifdef _WIN32
-  const auto separator = "\\";
-#else
-  const auto separator = "/";
-#endif
-
-  const auto path =
-    directory + separator + SanitiseForFilename(title) + "-" + std::to_string(best->id) + ".nam";
+  const auto path = CacheFilePath(directory, title, *best, format);
 
   if (!mClient.DownloadModel(*best, path, error))
   {
@@ -671,6 +699,7 @@ void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
 {
   int toneId = 0;
   std::string title;
+  std::string format;
 
   {
     std::lock_guard<std::mutex> lock(mMutex);
@@ -680,9 +709,10 @@ void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
 
     toneId = mTones[rowIndex].id;
     title = mTones[rowIndex].title;
+    format = mTones[rowIndex].format;
   }
 
-  RunAsync([this, toneId, title, onComplete = std::move(onComplete)] {
+  RunAsync([this, toneId, title, format, onComplete = std::move(onComplete)] {
     SetStatus(Status::Working, "Fetching capture...");
 
     std::vector<Model> models;
@@ -722,14 +752,7 @@ void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
       return;
     }
 
-#ifdef _WIN32
-    const auto separator = "\\";
-#else
-    const auto separator = "/";
-#endif
-
-    const auto path =
-      directory + separator + SanitiseForFilename(title) + "-" + std::to_string(best->id) + ".nam";
+    const auto path = CacheFilePath(directory, title, *best, format);
 
     if (!mClient.DownloadModel(*best, path, error))
     {

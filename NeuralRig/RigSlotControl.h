@@ -82,14 +82,19 @@ inline IColor SlotAccent(SlotKind kind)
 }
 
 /// The gear values this slot browses for, joined by the caller into the API's
-/// underscore-separated form. A cab slot wants impulse responses too, and an
-/// amp slot should surface amp-cab captures rather than hiding them.
+/// underscore-separated form.
+///
+/// The amp slot asks for amps only. It used to include amp-cab on the reasoning
+/// that most of the library is captured as full rigs, but that made the amp card
+/// return cabs as well, which is not what the card says it does.
+///
+/// The IR slot has no gear at all: an impulse response is a format.
 inline std::vector<std::string> SlotGears(SlotKind kind)
 {
   switch (kind)
   {
     case SlotKind::Pedal: return {"pedal"};
-    case SlotKind::Amp: return {"amp", "amp-cab"};
+    case SlotKind::Amp: return {"amp"};
     case SlotKind::Cab: return {"cab"};
     case SlotKind::IR: return {};
   }

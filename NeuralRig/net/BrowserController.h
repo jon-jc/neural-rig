@@ -146,7 +146,12 @@ public:
                           LoadCallback onComplete);
 
   /// Downloads a tone by id into the cache. Blocking; used by the above.
-  bool DownloadTone(int toneId, const std::string& title, std::string& pathOrError);
+  ///
+  /// The format decides the file extension, and the extension is what the rest
+  /// of the plugin uses to tell an impulse response from a capture. Saving
+  /// everything as .nam meant a downloaded IR was handed to the model parser,
+  /// which cannot read a WAV.
+  bool DownloadTone(int toneId, const std::string& title, const std::string& format, std::string& pathOrError);
 
   /// Handles a single redirect from the embedded browser. Called in a loop by
   /// AwaitToneSelection so one pick is not the end of the session.
