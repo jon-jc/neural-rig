@@ -276,8 +276,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     // The status strip sits above the browser rather than below it, so the
     // catalogue is the last thing in the window and never separates the rig
-    // from its readouts.
+    // from its readouts -- and so collapsing the window past the browser
+    // leaves everything else intact.
     const auto statusBarArea = remaining.GetFromTop(38.f);
+
+    mCollapsedHeight = static_cast<int>(statusBarArea.B + 14.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -375,7 +378,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
         panel->Hide(false);
 
-        mBrowserOpen = true;
+        if (!mBrowserOpen)
+        {
+          mBrowserOpen = true;
+          mPendingResizeHeight = PLUG_HEIGHT;
+        }
 
         std::string joined;
 
@@ -544,11 +551,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           browserToggleArea, mBrowserOpen,
           [this, pGraphics](bool open) {
             mBrowserOpen = open;
-
-            if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-              panel->Hide(!open);
-
-            pGraphics->SetAllControlsDirty();
+            mPendingResizeHeight = open ? PLUG_HEIGHT : mCollapsedHeight;
           }),
         kCtrlTagBrowserToggle);
 
@@ -562,6 +565,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
       pGraphics->AttachControl(new nr::shell::WindowMenuControl(fileMenuArea, "File", true));
       pGraphics->AttachControl(new nr::shell::WindowMenuControl(optionsMenuArea, "Options", false));
+
+      // The browser starts closed, so the window should start collapsed.
+      // Requested rather than done here: the graphics context is still being
+      // built inside the layout function.
+      if (!mBrowserOpen)
+        mPendingResizeHeight = mCollapsedHeight;
 
 
       // Presets save the whole rig, so they go through the plugin's own
@@ -776,6 +785,44 @@ void NeuralRig::OnIdle()
     nr::shell::RemoveNativeMenu(GetUI());
   }
 
+  // Grow or shrink the window with the browser. The layout is never re-run, so
+  // nothing is rebuilt and no control is freed underneath a handler; the
+  // browser simply falls outside a shorter window.
+  if (mPendingResizeHeight > 0)
+  {
+    const int height = mPendingResizeHeight;
+    mPendingResizeHeight = 0;
+
+    if (auto* pGraphics = GetUI())
+    {
+      // Visibility has to move with the window. The panel is attached hidden,
+      // and when the toggle stopped un-hiding it directly -- it only requests a
+      // height now -- nothing else did, so the window grew to reveal a control
+      // that was still hidden.
+      if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        panel->Hide(!mBrowserOpen);
+
+      pGraphics->Resize(PLUG_WIDTH, height, pGraphics->GetDrawScale());
+      pGraphics->SetAllControlsDirty();
+
+      // Only the first time. Re-centring on every browser toggle would make
+      // the window jump around under the pointer.
+      if (!mWindowCentred)
+      {
+        mWindowCentred = true;
+        nr::shell::CentreWindow(pGraphics);
+      }
+      else
+      {
+        // Opening the browser grows the window downwards from wherever it sits,
+        // so make sure the part that just appeared is actually on screen.
+        nr::shell::KeepOnScreen(pGraphics);
+      }
+    }
+
+    return;
+  }
+
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -817,12 +864,11 @@ void NeuralRig::OnIdle()
       // just changed.
       if (auto* pGraphics = GetUI())
       {
-        mBrowserOpen = false;
-
-        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-          panel->Hide(true);
-
-        pGraphics->SetAllControlsDirty();
+        if (mBrowserOpen)
+        {
+          mBrowserOpen = false;
+          mPendingResizeHeight = mCollapsedHeight;
+        }
       }
     }
   }

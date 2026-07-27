@@ -82,6 +82,80 @@ inline void RemoveNativeMenu(IGraphics* pGraphics)
 #endif
 }
 
+/// Centres the window on the screen's work area.
+///
+/// Against the work area rather than the full screen, so the taskbar cannot
+/// push the bottom of the window off the display. Called once, after the
+/// startup collapse: the window is created at its open height and centred by
+/// the dialog style, so shrinking it afterwards left it sitting off-centre.
+inline void CentreWindow(IGraphics* pGraphics)
+{
+#if defined(APP_API) && defined(OS_WIN)
+  HWND window = TopLevelWindow(pGraphics);
+
+  if (window == nullptr)
+    return;
+
+  RECT frame{};
+  GetWindowRect(window, &frame);
+
+  RECT work{};
+  if (!SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0))
+    return;
+
+  const int width = frame.right - frame.left;
+  const int height = frame.bottom - frame.top;
+
+  SetWindowPos(window, nullptr, work.left + ((work.right - work.left) - width) / 2,
+               work.top + ((work.bottom - work.top) - height) / 2, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+#endif
+}
+
+/// Nudges the window back inside the work area if a resize pushed it out.
+///
+/// Centring happens once, at the collapsed height. Opening the browser then
+/// grows the window downwards from that position, which on a shorter screen
+/// puts the bottom of the catalogue below the taskbar -- the part the user
+/// opened it to see. Moving rather than resizing, so the layout is untouched.
+inline void KeepOnScreen(IGraphics* pGraphics)
+{
+#if defined(APP_API) && defined(OS_WIN)
+  HWND window = TopLevelWindow(pGraphics);
+
+  if (window == nullptr)
+    return;
+
+  RECT frame{};
+  GetWindowRect(window, &frame);
+
+  RECT work{};
+  if (!SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0))
+    return;
+
+  const int width = frame.right - frame.left;
+  const int height = frame.bottom - frame.top;
+
+  int x = frame.left;
+  int y = frame.top;
+
+  if (frame.bottom > work.bottom)
+    y = work.bottom - height;
+
+  if (frame.right > work.right)
+    x = work.right - width;
+
+  // Clamp the top-left last: on a screen smaller than the window, keeping the
+  // top visible matters more than the bottom, since that is where the controls
+  // are.
+  x = x < work.left ? work.left : x;
+  y = y < work.top ? work.top : y;
+
+  if (x != frame.left || y != frame.top)
+    SetWindowPos(window, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+#endif
+}
+
 /// Drags the window when the empty part of the header is dragged, standing in
 /// for the caption bar that is no longer there.
 class WindowDragControl : public IControl
