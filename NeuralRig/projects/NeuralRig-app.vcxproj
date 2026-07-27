@@ -402,6 +402,7 @@
     <ClCompile Include="..\net\PlatformWin.cpp" />
     <ClCompile Include="..\net\Tone3000Client.cpp" />
     <ClCompile Include="..\net\BrowserController.cpp" />
+    <ClCompile Include="..\..\iPlug2\IPlug\Extras\WebView\IPlugWebView.cpp" />
     <ClCompile Include="..\net\LoopbackServer.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\conv1d.cpp" />

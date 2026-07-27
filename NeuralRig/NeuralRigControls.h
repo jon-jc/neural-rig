@@ -245,17 +245,17 @@ public:
 };
 
 // URL control for the "Get" models/irs links
+/// The globe button on a file browser row.
+///
+/// Upstream opens a web page with it. NeuralRig has an in-plugin TONE3000
+/// browser, so it takes an action function instead: pressing the globe on a
+/// slot should browse captures *for that slot*, not send the user to a website
+/// and leave them to download, unzip and locate a file by hand.
 class NAMGetButtonControl : public NAMSquareButtonControl
 {
 public:
-  NAMGetButtonControl(const IRECT& bounds, const char* label, const char* url, const ISVG& globeSVG)
-  : NAMSquareButtonControl(
-      bounds,
-      [url](IControl* pCaller) {
-        WDL_String fullURL(url);
-        pCaller->GetUI()->OpenURL(fullURL.Get());
-      },
-      globeSVG)
+  NAMGetButtonControl(const IRECT& bounds, const char* label, IActionFunction actionFunc, const ISVG& globeSVG)
+  : NAMSquareButtonControl(bounds, actionFunc, globeSVG)
   {
     SetTooltip(label);
   }
@@ -267,7 +267,7 @@ public:
   NAMFileBrowserControl(const IRECT& bounds, int clearMsgTag, const char* labelStr, const char* fileExtension,
                         IFileDialogCompletionHandlerFunc ch, const IVStyle& style, const ISVG& loadSVG,
                         const ISVG& clearSVG, const ISVG& leftSVG, const ISVG& rightSVG, const IBitmap& bitmap,
-                        const ISVG& globeSVG, const char* getButtonLabel, const char* getButtonURL)
+                        const ISVG& globeSVG, const char* getButtonLabel, IActionFunction getButtonAction)
   : IDirBrowseControlBase(bounds, fileExtension, false, false)
   , mClearMsgTag(clearMsgTag)
   , mDefaultLabelStr(labelStr)
@@ -280,7 +280,7 @@ public:
   , mRightSVG(rightSVG)
   , mGlobeSVG(globeSVG)
   , mGetButtonLabel(getButtonLabel)
-  , mGetButtonURL(getButtonURL)
+  , mGetButtonAction(getButtonAction)
   , mBrowserState(NAMBrowserState::Empty)
   {
     mIgnoreMouse = true;
@@ -405,7 +405,7 @@ public:
     mClearButton->SetAnimationEndActionFunction(clearFileFunc);
     AddChildControl(mClearButton);
 
-    mGetButton = new NAMGetButtonControl(clearAndGetButtonBounds, mGetButtonLabel, mGetButtonURL, mGlobeSVG);
+    mGetButton = new NAMGetButtonControl(clearAndGetButtonBounds, mGetButtonLabel, mGetButtonAction, mGlobeSVG);
     AddChildControl(mGetButton);
 
     // initialize control visibility
@@ -493,7 +493,7 @@ private:
 
   // new members for the "Get" button
   const char* mGetButtonLabel;
-  const char* mGetButtonURL;
+  IActionFunction mGetButtonAction;
   NAMBrowserState mBrowserState;
   NAMSquareButtonControl* mClearButton = nullptr;
   NAMGetButtonControl* mGetButton = nullptr;

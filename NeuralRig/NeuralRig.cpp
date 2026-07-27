@@ -103,6 +103,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
   }
 
+  // Pedal FX. Off by default: a capture should sound like the capture until
+  // the user asks for something on top of it.
+  GetParam(kDriveActive)->InitBool("DriveActive", false);
+  GetParam(kDriveAmount)->InitDouble("Drive", 3.0, 0.0, 10.0, 0.01);
+  GetParam(kDelayActive)->InitBool("DelayActive", false);
+  GetParam(kDelayTime)->InitDouble("Time", 350.0, 20.0, 1500.0, 1.0, "ms");
+  GetParam(kDelayMix)->InitDouble("Mix", 25.0, 0.0, 100.0, 0.1, "%");
+  GetParam(kReverbActive)->InitBool("ReverbActive", false);
+  GetParam(kReverbAmount)->InitDouble("Reverb", 25.0, 0.0, 100.0, 0.1, "%");
+
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -146,58 +156,105 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
 
     const auto b = pGraphics->GetBounds();
-    const auto mainArea = b.GetPadded(-20);
-    const auto contentArea = mainArea.GetPadded(-10);
-    const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight);
 
-    // Areas for knobs
-    const auto knobsPad = 20.0f;
-    const auto knobsExtraSpaceBelowTitle = 25.0f;
-    const auto singleKnobPad = -2.0f;
-    const auto knobsArea = contentArea.GetFromTop(NAM_KNOB_HEIGHT)
-                             .GetReducedFromLeft(knobsPad)
-                             .GetReducedFromRight(knobsPad)
-                             .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
+    // Every section is carved off a running remainder rather than positioned by
+    // hand, so nothing can overlap however the numbers are tuned. Reading top to
+    // bottom here is reading the signal path. The browser floats above all of
+    // it, so it takes no space here.
+    auto remaining = b.GetPadded(-14.f);
 
-    const auto ngToggleArea =
-      noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto headerArea = remaining.GetFromTop(46.f);
+    remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
-    // Areas for model and IR
-    const auto fileWidth = 200.0f;
-    const auto fileHeight = 30.0f;
-    const auto irYOffset = 38.0f;
-    // The capture chain stacks one browser per slot, signal flowing top to
-    // bottom. Slot 0 sits highest; the last slot keeps the position upstream's
-    // single browser had, so the IR row below it is undisturbed.
-    const auto slotPitch = 26.0f;
-    const auto modelArea =
-      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
-    auto slotArea = [&](size_t slot) {
-      const auto fromBottom = static_cast<float>(kNumSlots - 1 - slot);
-      return modelArea.GetVShifted(-slotPitch * fromBottom);
+    const auto titleArea = headerArea.GetFromLeft(320.f);
+    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
+
+    // Section heights are derived from what they hold rather than guessed. The
+    // FX group previously got less than a knob row plus a toggle row, so the
+    // toggles drew over the knobs and the value readouts fell off the window.
+    const auto knobBlockHeight = NAM_KNOB_HEIGHT + 34.f; // knob + its value text
+    // A switch plus its caption below it. The switch itself needs to stay a
+    // comfortable click target, so this is generous rather than tight -- the
+    // previous 28px left the caption drawing over the switch and made both
+    // awkward to hit.
+    const auto switchHeight = 26.f;
+    const auto toggleBlockHeight = switchHeight + 30.f;
+    const auto groupChrome = 28.f; // border and label
+
+    // --- Amp: knobs across the full width, with meters bracketing them -------
+    const auto ampGroupHeight = knobBlockHeight + toggleBlockHeight + groupChrome;
+    const auto ampGroup = remaining.GetFromTop(ampGroupHeight);
+    remaining = remaining.GetReducedFromTop(ampGroupHeight + 10.f);
+
+    const auto ampInner = ampGroup.GetPadded(-12.f).GetReducedFromTop(14.f);
+    const auto inputMeterArea = ampInner.GetFromLeft(22.f).GetMidVPadded(78.f);
+    const auto outputMeterArea = ampInner.GetFromRight(22.f).GetMidVPadded(78.f);
+
+    const auto knobsArea = ampInner.GetReducedFromLeft(44.f).GetReducedFromRight(44.f).GetFromTop(NAM_KNOB_HEIGHT);
+    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetMidHPadded(52.f);
+    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(52.f);
+    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetMidHPadded(52.f);
+    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(52.f);
+    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetMidHPadded(52.f);
+    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
+
+    // Toggles sit under the knob they belong to. The control draws its own
+    // caption inside its bounds, so it needs the whole block -- handing it only
+    // the switch height is what made the label collide with the switch and both
+    // awkward to hit.
+    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(44.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(44.f);
+
+    // --- Capture chain ------------------------------------------------------
+    const auto fileHeight = 32.0f;
+    const auto chainGroupHeight = fileHeight * static_cast<float>(kNumSlots) * 1.45f + groupChrome;
+    const auto chainGroup = remaining.GetFromTop(chainGroupHeight);
+    remaining = remaining.GetReducedFromTop(chainGroupHeight + 10.f);
+
+    const auto chainRows = chainGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
+    const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
+
+    auto slotRow = [&](size_t slot) {
+      return chainRows.GetFromTop(slotPitch).GetVShifted(slotPitch * static_cast<float>(slot));
     };
+    // Left gutter carries the slot number and the connector between stages.
+    auto slotNumberArea = [&](size_t slot) { return slotRow(slot).GetFromLeft(34.f); };
+    auto slotArea = [&](size_t slot) {
+      return slotRow(slot).GetReducedFromLeft(38.f).GetMidVPadded(fileHeight * 0.5f);
+    };
+
+    // --- Cabinet ------------------------------------------------------------
+    const auto cabinetGroupHeight = fileHeight + groupChrome + 12.f;
+    const auto cabinetGroup = remaining.GetFromTop(cabinetGroupHeight);
+    remaining = remaining.GetReducedFromTop(cabinetGroupHeight + 10.f);
+
+    const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
+    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
+
+    // --- Pedal FX -----------------------------------------------------------
+    // Post-amp, like a wet effects loop: drive belongs in front of a capture
+    // and these do not, so they sit after the cabinet where a real rig puts
+    // time-based effects.
+    const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
+    const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
+    const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
+    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight);
+
+    const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
+    const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
+    const auto delayMixKnobArea = fxKnobRow.GetGridCell(0, 2, 1, 4).GetMidHPadded(48.f);
+    const auto reverbKnobArea = fxKnobRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(48.f);
+
+    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(40.f);
+    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(40.f);
+    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(40.f);
+
+    // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
+    const auto modelArea = slotArea(0);
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    // Sits under the rack, where the eye lands after reading the chain.
-    const auto browseButtonArea = slotArea(0).GetVShifted(-30.f).GetFromLeft(110.f).GetHShifted(-46.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
-    const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
-
-    // Areas for meters
-    const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
-    const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
-
-    // Misc Areas
-    const auto settingsButtonArea = CornerButtonArea(b);
+    const auto modelIconArea = titleArea.GetFromRight(30.f);
 
     // Model loader button
     auto makeLoadModelCompletionHandler = [&](size_t slot) {
@@ -235,9 +292,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       }
     };
 
-    pGraphics->AttachBackground(BACKGROUND_FN);
+    // Drawn rather than photographed. Upstream's background is a fixed 600x400
+    // bitmap; at this width it would either distort or leave the layout boxed
+    // into a corner of the window.
+    pGraphics->AttachPanelBackground(PluginColors::NAM_1);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -248,13 +308,59 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const std::string defaultIRString = "Select IR...";
 #endif
     // Getting started page listing additional resources
-    const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
+    // Cabinet IRs are .wav, which the in-plugin browser does not handle -- it
+    // asks TONE3000 for NAM captures only. So the IR globe still opens a web
+    // page, pointed at TONE3000's IR catalogue rather than upstream's page.
+    auto browseForIRs = [](IControl* pCaller) {
+      WDL_String url("https://www.tone3000.com/search?formats=ir");
+      pCaller->GetUI()->OpenURL(url.Get());
+    };
+    // Bordered, labelled sections so the signal path is legible at a glance.
+    const auto groupStyle = style.WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.35f))
+                              .WithLabelText(IText(13.f, EAlign::Near, PluginColors::HELP_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(ampGroup, "AMP", 8.f, groupStyle));
+    pGraphics->AttachControl(new IVGroupControl(chainGroup, "CAPTURE CHAIN", 8.f, groupStyle));
+    pGraphics->AttachControl(new IVGroupControl(cabinetGroup, "CABINET", 8.f, groupStyle));
+    pGraphics->AttachControl(new IVGroupControl(fxGroup, "PEDAL FX", 8.f, groupStyle));
+
+    // Pedal FX
+    pGraphics->AttachControl(new NAMKnobControl(driveKnobArea, kDriveAmount, "Drive", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(delayKnobArea, kDelayTime, "Delay", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(delayMixKnobArea, kDelayMix, "Delay Mix", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(reverbKnobArea, kReverbAmount, "Reverb", style, knobBackgroundBitmap));
+
+    pGraphics->AttachControl(
+      new NAMSwitchControl(driveToggleArea, kDriveActive, "Drive", style, switchHandleBitmap));
+    pGraphics->AttachControl(
+      new NAMSwitchControl(delayToggleArea, kDelayActive, "Delay", style, switchHandleBitmap));
+    pGraphics->AttachControl(
+      new NAMSwitchControl(reverbToggleArea, kReverbActive, "Reverb", style, switchHandleBitmap));
+
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
+      // Slot number plus a downward arrow, so it reads as a chain rather than
+      // four unrelated file pickers.
+      const auto numberText = IText(13.f, EAlign::Center, PluginColors::NAM_THEMECOLOR);
+      const auto label = std::to_string(slot + 1) + (slot + 1 < kNumSlots ? "\n|" : "");
+      pGraphics->AttachControl(new ITextControl(slotNumberArea(slot), label.c_str(), numberText));
+
+      // The globe opens the in-plugin TONE3000 browser aimed at this slot, so
+      // picking a capture fills the row the user clicked. Upstream sends the
+      // user to a web page instead, which leaves them to download, unzip and
+      // find the file by hand.
+      // The globe opens the floating browser aimed at this slot, so whatever is
+      // picked lands in the row that was clicked.
+      auto browseForSlot = [pGraphics, slot](IControl*) {
+        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
+        page->SetTargetSlot(static_cast<int>(slot));
+        page->OpenBrowser();
+      };
+
       pGraphics->AttachControl(
         new NAMFileBrowserControl(slotArea(slot), kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
                                   makeLoadModelCompletionHandler(slot), style, fileSVG, crossSVG, leftArrowSVG,
-                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
+                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Browse TONE3000", browseForSlot),
         ModelBrowserCtrlTag(slot));
     }
 
@@ -285,7 +391,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl),
+                                "Get IRs from TONE3000", browseForIRs),
       kCtrlTagIRFileBrowser);
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
@@ -331,17 +437,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         mPendingLoads.emplace_back(slot, std::string(filePath));
       });
 
-      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser)->Hide(true);
-
-      pGraphics->AttachControl(new IVButtonControl(
-        browseButtonArea,
-        [pGraphics, this](IControl*) {
-          auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
-          mBrowser.Begin();
-          page->Refresh();
-          page->Hide(false);
-        },
-        "TONE3000", style));
+      // Floats above the rig, closed until asked for. A native web view always
+      // draws over the IGraphics surface, so it cannot be docked without either
+      // stealing space permanently or being too small to browse in; letting the
+      // user move, resize and close it is what makes that liveable.
+      pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -470,6 +570,31 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
   sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
+
+  // Pedal FX, after the cabinet and the DC blocker. Order within the loop is
+  // drive into delay into reverb, which is how the pedals would be cabled.
+  {
+    auto* wet = hpfPointers[0];
+
+    if (GetParam(kDriveActive)->Bool())
+    {
+      mDrive.SetAmount(GetParam(kDriveAmount)->Value());
+      mDrive.Process(wet, nFrames);
+    }
+
+    if (GetParam(kDelayActive)->Bool())
+    {
+      mDelay.SetTimeMs(GetParam(kDelayTime)->Value());
+      mDelay.SetMix(GetParam(kDelayMix)->Value() * 0.01);
+      mDelay.Process(wet, nFrames);
+    }
+
+    if (GetParam(kReverbActive)->Bool())
+    {
+      mReverb.SetMix(GetParam(kReverbAmount)->Value() * 0.01);
+      mReverb.Process(wet, nFrames);
+    }
+  }
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state
@@ -496,6 +621,12 @@ void NeuralRig::OnReset()
   SetTailSize(tailCycles * (int)(sampleRate / kDCBlockerFrequency));
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
+
+  // FX buffers are sized here, off the audio thread, so processing never
+  // allocates. 1500 ms matches the delay parameter's maximum.
+  mDelay.Prepare(sampleRate, 1500.0);
+  mReverb.Prepare(sampleRate);
+  mReverb.Reset();
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -528,6 +659,17 @@ void NeuralRig::OnIdle()
       WDL_String filePath;
       filePath.Set(path.c_str());
       _StageModel(static_cast<size_t>(slot), filePath);
+
+      // Take the browser off TONE3000's "you can close this tab" page, which is
+      // a dead end in a plugin with no tabs.
+      if (auto* pGraphics = GetUI())
+      {
+        if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        {
+          const std::string label = "slot " + std::to_string(slot + 1);
+          page->As<T3KBrowserPageControl>()->OnCaptureLoaded(label.c_str());
+        }
+      }
     }
   }
 

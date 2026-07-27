@@ -30,10 +30,14 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-#define PLUG_WIDTH 600
-// Taller than upstream's 400: the capture chain stacks four file browsers
-// where the original had one.
-#define PLUG_HEIGHT 500
+// The rig fills the window; TONE3000 floats above it in a window the user can
+// move, resize and close.
+//
+// The browser is a native OS view (WebView2 / WKWebView) and always draws above
+// anything IGraphics paints. Docking it either steals space permanently or is
+// too small to browse in, so it floats and gets out of the way on demand.
+#define PLUG_WIDTH 1120
+#define PLUG_HEIGHT 880
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0

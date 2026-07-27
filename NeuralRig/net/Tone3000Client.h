@@ -127,6 +127,14 @@ public:
   /// The URL to open in the user's browser to begin sign-in.
   std::string BuildAuthorizeUrl(const PkcePair& pkce, const std::string& redirectUri) const;
 
+  /// Authorize URL in TONE3000's "browse and pick one" mode.
+  ///
+  /// With prompt=select_tone the site lets the user browse its own catalogue --
+  /// artwork, demos, tags, the search they already know -- and hands back the
+  /// chosen tone_id with the authorization code. That is what makes an embedded
+  /// browser worth having over a list widget rebuilt on the API.
+  std::string BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const;
+
   /// Redeems an authorization code for tokens. Blocking.
   bool ExchangeCode(const std::string& code,
                     const std::string& verifier,

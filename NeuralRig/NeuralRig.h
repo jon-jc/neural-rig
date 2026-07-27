@@ -9,6 +9,7 @@
 #include "../NeuralAmpModelerCore/NAM/slimmable.h"
 
 #include "Colors.h"
+#include "PedalFX.h"
 #include "ToneStack.h"
 #include "net/BrowserController.h"
 
@@ -65,6 +66,15 @@ enum EParams
   kSlot2Active,
   kSlot3Active,
   kSlot4Active,
+  // Pedal FX, after the cabinet: drive belongs in front of a capture, and
+  // these are the ones that belong behind it.
+  kDriveActive,
+  kDriveAmount,
+  kDelayActive,
+  kDelayTime,
+  kDelayMix,
+  kReverbActive,
+  kReverbAmount,
   kNumParams
 };
 
@@ -393,6 +403,12 @@ private:
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
+
+  // Pedal FX, applied after the cabinet and DC blocker -- the wet end of the
+  // loop, where a real rig puts time-based effects.
+  nr::fx::Drive mDrive;
+  nr::fx::Delay mDelay;
+  nr::fx::Reverb mReverb;
 
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
