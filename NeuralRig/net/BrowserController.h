@@ -102,12 +102,15 @@ public:
   /// Forgets the session, locally and in the credential store.
   void SignOut();
 
-  /// Runs a catalogue search. Page is 1-based.
+  /// Runs a catalogue search. Page is 1-based. Format is separate from gear
+  /// because an impulse response is a format rather than a kind of gear, so
+  /// "show me IRs" cannot be expressed as a gear value.
   void Search(const std::string& text,
               const std::string& gear,
               const std::string& sort,
               int architecture,
-              int page);
+              int page,
+              const std::string& format = {});
 
   /// Re-runs the last search on a different page.
   void GoToPage(int page);

@@ -191,7 +191,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // A rig reads left to right: what the signal hits first is leftmost, and
     // the controls that shape all of it sit underneath in a single row.
     const auto slotCardHeight = 146.f;
-    const auto rigGroupHeight = slotCardHeight + knobBlockHeight + groupChrome + 18.f;
+    const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + switchHeight + groupChrome + 12.f;
     const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
     remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
 
@@ -220,7 +220,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // The two toggles keep their function but move out of the knob row, which
     // in the target layout carries knobs only. They sit as small switches
     // beneath the knob each one gates.
-    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + NAM_KNOB_HEIGHT).GetFromTop(switchHeight);
+    // Below the knob *and* its value text. Placing it at NAM_KNOB_HEIGHT put
+    // the switches on top of the readouts, which is why the captions were
+    // sliced in half by the browser panel's top edge.
+    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(switchHeight);
     const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
     const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
 
@@ -295,10 +298,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Cabinet IRs are .wav, which the in-plugin browser does not handle -- it
     // asks TONE3000 for NAM captures only. So the IR globe still opens a web
     // page, pointed at TONE3000's IR catalogue rather than upstream's page.
-    auto browseForIRs = [](IControl* pCaller) {
-      WDL_String url("https://www.tone3000.com/search?formats=ir");
-      pCaller->GetUI()->OpenURL(url.Get());
-    };
     // Raised, titled panels rather than wire-frame groups: a filled surface a
     // step lighter than the chassis, a shadow under it and a lit top edge do
     // far more to separate sections than a drawn border does.
@@ -356,8 +355,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           // to the IR loader whichever card it was dropped on.
           WDL_String irPath;
           irPath.Set(path);
-          mIRPath = irPath;
-          _StageIR(irPath);
+          _LoadIRWithFeedback(irPath);
         }
       };
 
@@ -390,12 +388,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       ->SetAnimationEndActionFunction(showSlimOverlay)
       ->Hide(true);
 
+    // The IR's on/off switch. There is deliberately no file-picker beside it:
+    // NAMFileBrowserControl draws chrome at a fixed size whatever rect it is
+    // given, so a toggle-sized rect spilled a folder icon, an arrow and a globe
+    // across the CAB card, covering the capture name and its clear button. IRs
+    // now arrive the same way captures do -- the browser's IR filter, or
+    // dropping a .wav on a card.
     pGraphics->AttachControl(new ISVGSwitchControl(irSwitchArea, {irIconOffSVG, irIconOnSVG}, kIRToggle));
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
-                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs from TONE3000", browseForIRs),
-      kCtrlTagIRFileBrowser);
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
@@ -670,6 +669,25 @@ void NeuralRig::OnReset()
   _UpdateLatency();
 }
 
+void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
+{
+  if (!irPath.GetLength())
+    return;
+
+  mIRPath = irPath;
+
+  const dsp::wav::LoadReturnCode retCode = _StageIR(irPath);
+
+  if (retCode == dsp::wav::LoadReturnCode::SUCCESS)
+    return;
+
+  std::stringstream message;
+  message << "Failed to load IR file " << irPath.Get() << ":\n";
+  message << dsp::wav::GetMsgForLoadReturnCode(retCode);
+
+  _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
+}
+
 void NeuralRig::OnIdle()
 {
   mInputSender.TransmitData(*this);
@@ -695,7 +713,18 @@ void NeuralRig::OnIdle()
     {
       WDL_String filePath;
       filePath.Set(path.c_str());
-      _StageModel(static_cast<size_t>(slot), filePath);
+
+      // A downloaded impulse response is a .wav and belongs to the cabinet, not
+      // to a capture slot. Without this the browser's IR filter would download
+      // files that nothing ever loaded.
+      if (std::filesystem::path(path).extension() == ".wav")
+      {
+        _LoadIRWithFeedback(filePath);
+      }
+      else
+      {
+        _StageModel(static_cast<size_t>(slot), filePath);
+      }
 
       // Close the browser once a capture lands: the user asked for one, they
       // got it, and leaving the panel covering the rig hides the thing they

@@ -279,6 +279,12 @@ private:
   // it wasn't successful.
   dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath);
 
+  /// Stages an IR and tells the user if it failed. Shared by the three ways an
+  /// IR can arrive -- dropped on a card, downloaded from the browser's IR
+  /// filter, or restored from state -- so a bad file reports itself whichever
+  /// route it came in by.
+  void _LoadIRWithFeedback(const WDL_String& irPath);
+
   bool _HaveModel(size_t slot) const { return slot < kNumSlots && mModels[slot] != nullptr; };
   bool _HaveAnyModel() const
   {

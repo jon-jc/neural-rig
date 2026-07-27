@@ -300,10 +300,12 @@ void BrowserController::Search(const std::string& text,
                                const std::string& gear,
                                const std::string& sort,
                                int architecture,
-                               int page)
+                               int page,
+                               const std::string& format)
 {
   SearchQuery query;
   query.text = text;
+  query.format = format;
   query.sort = sort.empty() ? "best-match" : sort;
   query.architecture = architecture;
   query.page = std::max(1, page);
@@ -501,7 +503,7 @@ void BrowserController::GoToPage(int page)
   }
 
   const auto gear = query.gears.empty() ? std::string{} : query.gears.front();
-  Search(query.text, gear, query.sort, query.architecture, page);
+  Search(query.text, gear, query.sort, query.architecture, page, query.format);
 }
 
 std::string BrowserController::BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const
