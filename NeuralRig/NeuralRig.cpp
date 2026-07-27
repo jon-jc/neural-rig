@@ -16,6 +16,7 @@
 #include "architecture.hpp"
 
 #include "NeuralRigControls.h"
+#include "Presets.h"
 #include "RigSlotControl.h"
 #include "StatusBar.h"
 #include "T3KBrowserPanel.h"
@@ -169,6 +170,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto titleArea = headerArea.GetFromLeft(320.f);
     const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
+    const auto presetBarArea = headerArea.GetMidHPadded(190.f).GetMidVPadded(15.f);
 
     // Section heights are derived from what they hold rather than guessed. The
     // FX group previously got less than a knob row plus a toggle row, so the
@@ -484,6 +486,29 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         kCtrlTagBrowserToggle);
 
       pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
+
+      // Presets save the whole rig, so they go through the plugin's own
+      // state serialization rather than a second format that would drift
+      // from the parameter list.
+      pGraphics->AttachControl(
+        new nr::presets::PresetBarControl(
+          presetBarArea,
+          [this](const std::string& name) {
+            IByteChunk chunk;
+            if (SerializeState(chunk))
+              nr::presets::Save(name, chunk);
+          },
+          [this](const std::string& name) {
+            IByteChunk chunk;
+            if (!nr::presets::Load(name, chunk))
+              return;
+
+            UnserializeState(chunk, 0);
+            OnParamReset(EParamSource::kPresetRecall);
+            if (auto* ui = GetUI())
+              ui->SetAllControlsDirty();
+          }),
+        kCtrlTagPresetBar);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);

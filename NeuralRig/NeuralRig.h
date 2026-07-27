@@ -101,6 +101,7 @@ enum ECtrlTags
   kCtrlTagChainFlow,
   kCtrlTagBrowserToggle,
   kCtrlTagStatusBar,
+  kCtrlTagPresetBar,
   kNumCtrlTags
 };
 
