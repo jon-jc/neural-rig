@@ -345,11 +345,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         if (!mBrowserOpen)
         {
           mBrowserOpen = true;
-          pGraphics->Resize(PLUG_WIDTH, kExpandedHeight, pGraphics->GetDrawScale(), true);
-          panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
-
-          if (panel == nullptr)
-            return;
+          mPendingResizeHeight = kExpandedHeight;
         }
 
         std::string joined;
@@ -523,7 +519,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
             // Grow the window instead of overlaying: the catalogue covering the
             // slot you are loading into was the original complaint about the
             // old web view, and overlaying reproduces it.
-            pGraphics->Resize(PLUG_WIDTH, open ? kExpandedHeight : kCollapsedHeight, pGraphics->GetDrawScale(), true);
+            //
+            // Requested rather than done here. Resizing rebuilds every control,
+            // and this lambda is running inside one of them.
+            mPendingResizeHeight = open ? kExpandedHeight : kCollapsedHeight;
           }),
         kCtrlTagBrowserToggle);
 
@@ -733,6 +732,21 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
 
 void NeuralRig::OnIdle()
 {
+  // Apply a requested window resize here, where no control's method is on the
+  // stack. Doing it from a control's handler rebuilds the control tree and
+  // frees the object that is still executing.
+  if (mPendingResizeHeight > 0)
+  {
+    const int height = mPendingResizeHeight;
+    mPendingResizeHeight = 0;
+
+    if (auto* pGraphics = GetUI())
+      pGraphics->Resize(PLUG_WIDTH, height, pGraphics->GetDrawScale(), true);
+
+    // The rebuild replaced everything this tick would have touched.
+    return;
+  }
+
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -777,7 +791,7 @@ void NeuralRig::OnIdle()
         if (mBrowserOpen)
         {
           mBrowserOpen = false;
-          pGraphics->Resize(PLUG_WIDTH, kCollapsedHeight, pGraphics->GetDrawScale(), true);
+          mPendingResizeHeight = kCollapsedHeight;
         }
       }
     }

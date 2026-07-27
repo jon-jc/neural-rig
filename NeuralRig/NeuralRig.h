@@ -448,6 +448,12 @@ private:
   /// resizing re-runs the layout function, which rebuilds every control.
   bool mBrowserOpen = false;
 
+  /// Height the window should become, applied from OnIdle. Resizing rebuilds
+  /// every control, so doing it from a control's own mouse handler destroys
+  /// that control while its method is still on the stack. Zero means nothing
+  /// pending.
+  int mPendingResizeHeight = 0;
+
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the
   // audio thread reads, so the path is parked here and picked up on the message
