@@ -40,12 +40,11 @@
 #define PLUG_HEIGHT 880
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
-// The host (and the standalone's own window frame) may resize us, which is
-// what makes maximising and full screen work. The corner resizer alone only
-// scaled within a fixed frame.
-#define PLUG_HOST_RESIZE 1
-#define PLUG_MIN_WIDTH PLUG_WIDTH / 2
-#define PLUG_MIN_HEIGHT PLUG_HEIGHT / 2
+// Fixed size. Scaling the UI to an arbitrary window shape letterboxes it --
+// the layout holds one aspect ratio, so any other window shape leaves an
+// unpainted strip beside it -- and snapping the window back to the UI's shape
+// fought the platform badly enough to send it to 4480x3520.
+#define PLUG_HOST_RESIZE 0
 #define PLUG_MAX_WIDTH PLUG_WIDTH * 4
 #define PLUG_MAX_HEIGHT PLUG_HEIGHT * 4
 

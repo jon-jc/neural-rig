@@ -246,10 +246,6 @@ public:
   void OnReset() override;
   void OnIdle() override;
 
-  /// The window was resized by the platform -- a frame drag, or maximising.
-  /// Scales the UI to fit rather than leaving it at its original size in the
-  /// corner.
-  void OnParentWindowResize(int width, int height) override;
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;

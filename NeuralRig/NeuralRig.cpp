@@ -21,6 +21,7 @@
 #include "StatusBar.h"
 #include "T3KBrowserPanel.h"
 #include "Theme.h"
+#include "WindowChrome.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -125,7 +126,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
   };
 
   mLayoutFunc = [&](IGraphics* pGraphics) {
-    pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
 
     pGraphics->AttachTextEntryControl();
     pGraphics->EnableMouseOver(true);
@@ -175,7 +175,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
     const auto titleArea = headerArea.GetFromLeft(320.f);
-    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
+    // Caption-bar buttons, right to left in the usual order. No maximise: the
+    // layout holds one size, so offering one would be a button that lies.
+    const auto closeButtonArea = headerArea.GetFromRight(30.f).GetMidVPadded(15.f);
+    const auto minimiseButtonArea = closeButtonArea.GetHShifted(-36.f);
+    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-76.f).GetMidVPadded(17.f);
     const auto presetBarArea = headerArea.GetMidHPadded(190.f).GetMidVPadded(15.f);
 
     // Section heights are derived from what they hold rather than guessed. The
@@ -307,6 +311,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Drawn rather than photographed, so it stays sharp at any editor scale and
     // the palette lives in one place.
     pGraphics->AttachControl(new nr::theme::ChassisControl(b));
+
+    // Stands in for the caption bar the borderless window no longer has.
+    // Attached before the header's own controls so they receive their clicks
+    // first and only bare header space starts a drag.
+    pGraphics->AttachControl(new nr::shell::WindowDragControl(headerArea));
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
@@ -527,6 +536,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
       pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
 
+      // Replace the caption-bar buttons that went with the OS frame. Inert in
+      // plugin builds, where the host owns the window.
+      pGraphics->AttachControl(
+        new nr::shell::WindowButtonControl(minimiseButtonArea, nr::shell::WindowButton::Minimise));
+      pGraphics->AttachControl(new nr::shell::WindowButtonControl(closeButtonArea, nr::shell::WindowButton::Close));
+
 
       // Presets save the whole rig, so they go through the plugin's own
       // state serialization rather than a second format that would drift
@@ -728,28 +743,6 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
   message << dsp::wav::GetMsgForLoadReturnCode(retCode);
 
   _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
-}
-
-void NeuralRig::OnParentWindowResize(int width, int height)
-{
-  auto* pGraphics = GetUI();
-
-  if (pGraphics == nullptr || width <= 0 || height <= 0)
-    return;
-
-  // The logical size stays fixed and the scale absorbs the difference, which is
-  // what keeps every rect, knob and font in proportion instead of leaving a
-  // fixed-size UI in the corner of a maximised window.
-  const float fitX = static_cast<float>(width) / static_cast<float>(PLUG_WIDTH);
-  const float fitY = static_cast<float>(height) / static_cast<float>(PLUG_HEIGHT);
-
-  // Fit, not fill: the smaller ratio keeps the whole UI on screen.
-  const float scale = std::clamp(std::min(fitX, fitY), 0.25f, 4.0f);
-
-  // needsPlatformResize is false because the platform has already resized us.
-  // Asking it to resize again is the feedback loop that previously ran the
-  // window away a little further on every tick.
-  pGraphics->Resize(PLUG_WIDTH, PLUG_HEIGHT, scale, false);
 }
 
 void NeuralRig::OnIdle()

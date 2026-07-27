@@ -63,13 +63,15 @@ BEGIN
     COMBOBOX        IDC_COMBO_MIDI_OUT_CHAN,125,250,50,200,CBS_DROPDOWNLIST | CBS_HASSTRINGS
 END
 
-// WS_MAXIMIZEBOX and WS_THICKFRAME are what make the standalone maximisable
-// and resizable; DS_MODALFRAME is gone because it forces a fixed border, so
-// the window had no grab edges and its maximise button was absent. The plugin
-// side is handled separately by PLUG_HOST_RESIZE.
+// Borderless. No caption, no frame, no system menu: the plugin draws its own
+// title area and its own close button, so the OS chrome is redundant and its
+// grab edges would only invite a resize the layout cannot honour.
+// No CAPTION line: declaring one puts WS_CAPTION back even when the style does
+// not ask for it, which is what kept the title bar after the frame was removed.
+// The menu stays -- it is where the standalone's audio device settings live,
+// and losing it would leave no way to choose an interface.
 IDD_DIALOG_MAIN DIALOG 0, 0, 500, 300
-STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "NeuralRig"
+STYLE DS_SETFONT | DS_CENTER | WS_POPUP
 MENU IDR_MENU1
 FONT 8, "MS Sans Serif"
 BEGIN
