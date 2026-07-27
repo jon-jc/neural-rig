@@ -647,6 +647,17 @@ void NeuralRig::OnIdle()
       WDL_String filePath;
       filePath.Set(path.c_str());
       _StageModel(static_cast<size_t>(slot), filePath);
+
+      // Take the browser off TONE3000's "you can close this tab" page, which is
+      // a dead end in a plugin with no tabs.
+      if (auto* pGraphics = GetUI())
+      {
+        if (auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        {
+          const std::string label = "slot " + std::to_string(slot + 1);
+          page->As<T3KBrowserPageControl>()->OnCaptureLoaded(label.c_str());
+        }
+      }
     }
   }
 

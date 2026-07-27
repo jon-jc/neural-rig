@@ -144,6 +144,22 @@ public:
     Hide(true);
   }
 
+  /// Called once a capture has actually been staged. TONE3000 leaves the view
+  /// on a "you can close this tab" page, which is a dead end inside a plugin
+  /// that has no tabs -- send it back to browsing so the next pick is one
+  /// click away.
+  ///
+  /// The PKCE pair is deliberately reused: the listener is still waiting on the
+  /// same state value, and regenerating it here would make the next selection
+  /// fail its own security check.
+  void OnCaptureLoaded(const char* slotDescription)
+  {
+    if (mStatusLabel != nullptr)
+      mStatusLabel->SetStr((std::string("Loaded into ") + slotDescription + " \xE2\x80\xA2 pick another").c_str());
+
+    NavigateHome();
+  }
+
   /// Polled from the plugin's idle callback so status text tracks the
   /// controller without the worker touching IGraphics.
   void Refresh()
@@ -162,6 +178,12 @@ private:
 
   void OnWebViewReady(IWebViewControl* pCaller)
   {
+    // IWebViewControl::OnAttached places the native view at unscaled
+    // coordinates, while every later update multiplies by the draw scale. On a
+    // scaled display those disagree and the view lands outside its column,
+    // over the rig. Forcing a resize once the view exists reconciles them.
+    pCaller->OnResize();
+
     if (!mRedirectUri.empty())
       pCaller->LoadURL(SelectToneUrl().c_str());
   }
