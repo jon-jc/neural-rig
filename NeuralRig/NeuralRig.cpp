@@ -157,16 +157,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto b = pGraphics->GetBounds();
 
-    // The browser strip is reserved first and nothing else may draw into it: a
-    // native web view sits above the IGraphics surface, so anything sharing its
-    // rectangle would simply be hidden.
-    const auto browserStrip = b.GetFromBottom(NR_BROWSER_HEIGHT);
-    const auto rigArea = b.GetReducedFromBottom(NR_BROWSER_HEIGHT);
-
     // Every section is carved off a running remainder rather than positioned by
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
-    // bottom here is reading the signal path.
-    auto remaining = rigArea.GetPadded(-14.f);
+    // bottom here is reading the signal path. The browser floats above all of
+    // it, so it takes no space here.
+    auto remaining = b.GetPadded(-14.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
@@ -178,8 +173,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // FX group previously got less than a knob row plus a toggle row, so the
     // toggles drew over the knobs and the value readouts fell off the window.
     const auto knobBlockHeight = NAM_KNOB_HEIGHT + 34.f; // knob + its value text
-    const auto toggleBlockHeight = 46.f;                 // switch + its caption
-    const auto groupChrome = 28.f;                       // border and label
+    // A switch plus its caption below it. The switch itself needs to stay a
+    // comfortable click target, so this is generous rather than tight -- the
+    // previous 28px left the caption drawing over the switch and made both
+    // awkward to hit.
+    const auto switchHeight = 26.f;
+    const auto toggleBlockHeight = switchHeight + 30.f;
+    const auto groupChrome = 28.f; // border and label
 
     // --- Amp: knobs across the full width, with meters bracketing them -------
     const auto ampGroupHeight = knobBlockHeight + toggleBlockHeight + groupChrome;
@@ -199,9 +199,9 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
 
     // Toggles sit under the knob they belong to, with room to breathe.
-    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight).GetFromTop(28.f);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(34.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(34.f);
+    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight).GetFromTop(switchHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(40.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(40.f);
 
     // --- Capture chain ------------------------------------------------------
     const auto fileHeight = 32.0f;
@@ -236,16 +236,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
     const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
     const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
-    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight).GetFromTop(28.f);
+    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight).GetFromTop(switchHeight);
 
     const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
     const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
     const auto delayMixKnobArea = fxKnobRow.GetGridCell(0, 2, 1, 4).GetMidHPadded(48.f);
     const auto reverbKnobArea = fxKnobRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(48.f);
 
-    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(30.f);
-    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(30.f);
-    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(30.f);
+    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(40.f);
+    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(40.f);
+    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(40.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -346,12 +346,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // picking a capture fills the row the user clicked. Upstream sends the
       // user to a web page instead, which leaves them to download, unzip and
       // find the file by hand.
-      // The browser is always on screen, so the globe just aims it at this
-      // slot: whatever is picked next lands in the row that was clicked.
+      // The globe opens the floating browser aimed at this slot, so whatever is
+      // picked lands in the row that was clicked.
       auto browseForSlot = [pGraphics, slot](IControl*) {
-        pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)
-          ->As<T3KBrowserPageControl>()
-          ->SetTargetSlot(static_cast<int>(slot));
+        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
+        page->SetTargetSlot(static_cast<int>(slot));
+        page->OpenBrowser();
       };
 
       pGraphics->AttachControl(
@@ -425,7 +425,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     // TONE3000 browser, and the button that opens it.
     {
-      auto* browserPage = new T3KBrowserPageControl(browserStrip, mBrowser, style);
+      auto* browserPage = new T3KBrowserPageControl(b, mBrowser, style);
 
       browserPage->SetLoadIntoSlotFunc([this](int slot, const char* filePath) {
         // Called from a worker thread. Park the path and let OnIdle stage it on
@@ -434,12 +434,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         mPendingLoads.emplace_back(slot, std::string(filePath));
       });
 
-      // Permanent, in its own column. A native web view draws above everything
-      // IGraphics paints, so as a modal it covered the whole plugin; given a
-      // column nothing else uses, that stops being a problem and the catalogue
-      // is simply always there.
+      // Floats above the rig, closed until asked for. A native web view always
+      // draws over the IGraphics surface, so it cannot be docked without either
+      // stealing space permanently or being too small to browse in; letting the
+      // user move, resize and close it is what makes that liveable.
       pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser);
-      browserPage->Open();
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);

@@ -15,30 +15,33 @@ using namespace iplug;
 using namespace igraphics;
 
 /**
-    TONE3000, embedded.
+    TONE3000 as a floating window inside the plugin.
 
-    A real browser inside the plugin rather than a list widget built on top of
-    the API. The user gets tone3000.com itself -- artwork, demos, tags, the
-    search they already know -- and picking a tone hands the id straight back to
-    us to download and load. That is the flow TONE3000 designed the
-    `prompt=select_tone` OAuth mode for.
+    A real browser rather than a list widget rebuilt on the API: the user gets
+    tone3000.com itself, and picking a tone hands the id straight back through
+    the `prompt=select_tone` OAuth mode so it downloads and loads into a slot.
 
-    Windows uses WebView2 (Edge Chromium), macOS WKWebView. The WebView2
-    *runtime* must be present, which it is on Windows 11 and anywhere Edge is
-    installed; the loader is linked statically so nothing ships beside the
-    plugin.
+    It floats, and can be moved, resized and closed. That is not decoration.
+    The web view is a native OS window layered above the IGraphics surface, so
+    it will always cover whatever is beneath it -- the platform offers no way to
+    draw over it and no way to hide it. Docking it into a fixed region either
+    steals space permanently or is too small to browse in. Letting the user push
+    it out of the way, size it to taste, and close it entirely is the only
+    arrangement where the constraint stops mattering.
 */
 class T3KBrowserPageControl : public IContainerBase
 {
 public:
   using LoadIntoSlotFunc = std::function<void(int slot, const char* filePath)>;
 
-  T3KBrowserPageControl(const IRECT& bounds, nr::net::BrowserController& controller, const IVStyle& style)
-  : IContainerBase(bounds)
+  T3KBrowserPageControl(const IRECT& editorBounds, nr::net::BrowserController& controller, const IVStyle& style)
+  : IContainerBase(DefaultFrame(editorBounds))
+  , mEditorBounds(editorBounds)
   , mController(controller)
   , mStyle(style)
   {
     mIgnoreMouse = false;
+    mHide = true;
   }
 
   void SetLoadIntoSlotFunc(LoadIntoSlotFunc func) { mLoadIntoSlot = std::move(func); }
@@ -51,182 +54,242 @@ public:
       mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
   }
 
-  /// Fully opaque. A translucent modal over a busy amp panel is unreadable.
   void Draw(IGraphics& g) override
   {
-    g.FillRect(PluginColors::NAM_1, mRECT);
-    g.FillRect(PluginColors::NAM_2, mRECT.GetFromTop(kHeaderHeight));
-    g.DrawLine(PluginColors::NAM_THEMECOLOR, mRECT.L, mRECT.T + kHeaderHeight, mRECT.R,
-               mRECT.T + kHeaderHeight, nullptr, 2.f);
+    const auto frame = GetRECT();
+
+    // A drop shadow reads the panel as floating above the rig rather than
+    // punched into it.
+    g.FillRoundRect(IColor(120, 0, 0, 0), frame.GetTranslated(4.f, 5.f), 8.f);
+    g.FillRoundRect(PluginColors::NAM_1, frame, 8.f);
+    g.FillRect(PluginColors::NAM_2, frame.GetFromTop(kTitleBarHeight));
+    g.DrawRoundRect(PluginColors::NAM_THEMECOLOR, frame, 8.f, nullptr, 1.5f);
 
     IContainerBase::Draw(g);
+
+    // Resize grip: three diagonal ticks in the bottom-right, the usual idiom.
+    const auto grip = GripRect();
+    for (int i = 1; i <= 3; i++)
+    {
+      const auto inset = static_cast<float>(i) * 4.f;
+      g.DrawLine(PluginColors::HELP_TEXT, grip.R - inset, grip.B - 2.f, grip.R - 2.f, grip.B - inset, nullptr,
+                 1.f);
+    }
+  }
+
+  // --- Move and resize ------------------------------------------------------
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    mDraggingFrame = GetRECT().GetFromTop(kTitleBarHeight).Contains(x, y);
+    mResizing = GripRect().Contains(x, y);
+  }
+
+  void OnMouseUp(float x, float y, const IMouseMod& mod) override
+  {
+    mDraggingFrame = false;
+    mResizing = false;
+  }
+
+  void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
+  {
+    if (!mDraggingFrame && !mResizing)
+      return;
+
+    auto frame = GetRECT();
+
+    if (mResizing)
+    {
+      frame.R = std::min(mEditorBounds.R - 4.f, std::max(frame.L + kMinWidth, frame.R + dX));
+      frame.B = std::min(mEditorBounds.B - 4.f, std::max(frame.T + kMinHeight, frame.B + dY));
+    }
+    else
+    {
+      // Keep the title bar reachable: a panel dragged off-screen cannot be
+      // dragged back.
+      const auto width = frame.W();
+      const auto height = frame.H();
+
+      frame.L = std::min(mEditorBounds.R - 80.f, std::max(mEditorBounds.L - width + 80.f, frame.L + dX));
+      frame.T = std::min(mEditorBounds.B - kTitleBarHeight, std::max(mEditorBounds.T, frame.T + dY));
+      frame.R = frame.L + width;
+      frame.B = frame.T + height;
+    }
+
+    Relayout(frame);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    GetUI()->SetMouseCursor(GripRect().Contains(x, y) ? ECursor::SIZENWSE : ECursor::ARROW);
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
     if (key.VK == kVK_ESCAPE)
     {
-      Close();
+      CloseBrowser();
       return true;
     }
 
     return false;
   }
 
-  /// Collapses the browser out of sight, or brings it back.
-  ///
-  /// IControl::Hide() cannot help here: the web view is a native OS window
-  /// layered over the IGraphics surface, so it keeps drawing regardless of what
-  /// the control thinks its visibility is. Moving it outside the window is the
-  /// lever the platform actually gives us.
-  void SetCollapsed(bool collapsed)
-  {
-    if (mCollapsed == collapsed || mWebView == nullptr)
-      return;
-
-    mCollapsed = collapsed;
-    PlaceWebView();
-
-    if (mCollapseButton != nullptr)
-      mCollapseButton->SetLabelStr(collapsed ? "SHOW" : "HIDE");
-
-    SetDirty(false);
-  }
-
-  bool IsCollapsed() const { return mCollapsed; }
-
-  /// Keep the native view with its section when the host rescales the editor;
-  /// the base class would reposition it through the broken path.
-  void OnRescale() override { PlaceWebView(); }
-
   void OnAttached() override
   {
-    auto remaining = GetRECT();
+    BuildChrome();
 
-    auto header = remaining.GetFromTop(kHeaderHeight);
-    remaining = remaining.GetReducedFromTop(kHeaderHeight);
-    mContentBounds = remaining;
-
-    const auto headerPad = header.GetPadded(-12.f);
-
-    AddChildControl(new ITextControl(headerPad.GetFromLeft(200.f), "TONE3000",
-                                     IText(22.f, EAlign::Near, COLOR_WHITE)));
-
-    mStatusLabel = new ITextControl(headerPad.GetReducedFromLeft(210.f).GetReducedFromRight(330.f), "",
-                                    IText(13.f, EAlign::Near, PluginColors::HELP_TEXT));
-    AddChildControl(mStatusLabel);
-
-    auto buttons = headerPad.GetFromRight(320.f);
-
-    AddChildControl(new IVButtonControl(
-      buttons.GetFromLeft(70.f), [this](IControl*) { NavigateHome(); }, "HOME", mStyle));
-
-    AddChildControl(new ITextControl(buttons.GetFromLeft(150.f).GetFromRight(72.f), "Load into",
-                                     IText(13.f, EAlign::Far, PluginColors::HELP_TEXT)));
-
-    mSlotButton = new IVButtonControl(
-      buttons.GetFromLeft(250.f).GetFromRight(94.f),
-      [this](IControl*) {
-        mTargetSlot = (mTargetSlot + 1) % 4;
-        mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
-      },
-      "Slot 1", mStyle);
-    AddChildControl(mSlotButton);
-
-    AddChildControl(new IVButtonControl(
-      buttons.GetFromRight(140.f).GetFromLeft(68.f), [this](IControl*) { NavigateHome(); }, "RELOAD", mStyle));
-
-    mCollapseButton = new IVButtonControl(
-      buttons.GetFromRight(64.f), [this](IControl*) { SetCollapsed(!mCollapsed); }, "HIDE", mStyle);
-    AddChildControl(mCollapseButton);
-
-    // The browser fills everything below the header.
     mWebView = new IWebViewControl(
-      mContentBounds, true, [this](IWebViewControl* pCaller) { OnWebViewReady(pCaller); },
+      ContentRect(), true, [this](IWebViewControl* pCaller) { OnWebViewReady(pCaller); },
       [this](IWebViewControl*, const char* json) { (void)json; });
 
     AddChildControl(mWebView);
   }
 
-  /// Starts the loopback listener and points the browser at TONE3000's own
-  /// selection flow, so the user browses the real site.
-  void Open()
+  void OnRescale() override { PlaceWebView(); }
+
+  /// Shows the panel and points it at TONE3000's selection flow.
+  void OpenBrowser()
   {
-    mRedirectUri = mLoopback.Start();
+    if (!mHide)
+      return;
+
+    Hide(false);
 
     if (mRedirectUri.empty())
     {
-      SetStatus("Could not open a local port for sign-in");
-      return;
+      mRedirectUri = mLoopback.Start();
+
+      if (mRedirectUri.empty())
+      {
+        SetStatus("Could not open a local port for sign-in");
+        return;
+      }
+
+      mPkce = nr::net::CreatePkcePair();
+      StartWaitingForSelection();
     }
 
-    mPkce = nr::net::CreatePkcePair();
     SetStatus("Browse TONE3000 and choose a capture");
-
-    if (mWebView != nullptr)
-      mWebView->LoadURL(SelectToneUrl().c_str());
-
-    StartWaitingForSelection();
+    NavigateHome();
+    PlaceWebView();
   }
 
-  void Close()
+  /// Hides the panel. The native view is given a zero rect, which is the only
+  /// way to make it stop drawing.
+  void CloseBrowser()
   {
-    mLoopback.Stop();
     Hide(true);
+    PlaceWebView();
+    SetDirty(false);
   }
 
-  /// Called once a capture has actually been staged. TONE3000 leaves the view
-  /// on a "you can close this tab" page, which is a dead end inside a plugin
-  /// that has no tabs -- send it back to browsing so the next pick is one
-  /// click away.
-  ///
-  /// The PKCE pair is deliberately reused: the listener is still waiting on the
-  /// same state value, and regenerating it here would make the next selection
-  /// fail its own security check.
+  bool IsOpen() const { return !mHide; }
+
+  /// Called once a capture has been staged. TONE3000 leaves the view on a "you
+  /// can close this tab" page, a dead end in a plugin with no tabs, so send it
+  /// back to browsing.
   void OnCaptureLoaded(const char* slotDescription)
   {
-    if (mStatusLabel != nullptr)
-      mStatusLabel->SetStr((std::string("Loaded into ") + slotDescription + " \xE2\x80\xA2 pick another").c_str());
-
+    SetStatus(std::string("Loaded into ") + slotDescription + " \xE2\x80\xA2 pick another");
     NavigateHome();
   }
 
-  /// Polled from the plugin's idle callback so status text tracks the
-  /// controller without the worker touching IGraphics.
   void Refresh()
   {
     const auto snapshot = mController.GetSnapshot();
 
-    if (!snapshot.message.empty())
+    if (!snapshot.message.empty() && mStatusLabel != nullptr)
       mStatusLabel->SetStr(snapshot.message.c_str());
 
     SetDirty(false);
   }
 
 private:
-  static constexpr float kHeaderHeight = NR_BROWSER_HEADER_HEIGHT;
-  static constexpr int kSelectionTimeoutMs = 600000; // ten minutes of browsing
+  static constexpr float kTitleBarHeight = 34.f;
+  static constexpr float kGripSize = 18.f;
+  static constexpr float kMinWidth = 480.f;
+  static constexpr float kMinHeight = 320.f;
+  static constexpr int kSelectionTimeoutMs = 600000;
+
+  /// Opens large enough to browse in, inset from the editor edges so the frame
+  /// reads as a window.
+  static IRECT DefaultFrame(const IRECT& editor)
+  {
+    const auto width = std::min(920.f, editor.W() - 80.f);
+    const auto height = std::min(640.f, editor.H() - 80.f);
+    return editor.GetCentredInside(width, height);
+  }
+
+  IRECT ContentRect() const { return GetRECT().GetReducedFromTop(kTitleBarHeight).GetPadded(-3.f); }
+
+  IRECT GripRect() const { return GetRECT().GetFromBRHC(kGripSize, kGripSize); }
+
+  void Relayout(const IRECT& frame)
+  {
+    SetTargetAndDrawRECTs(frame);
+    BuildChrome();
+    PlaceWebView();
+    GetUI()->SetAllControlsDirty();
+  }
+
+  /// (Re)places the title bar controls. Called on construction and on every
+  /// move or resize, so the chrome follows the frame.
+  void BuildChrome()
+  {
+    auto titleBar = GetRECT().GetFromTop(kTitleBarHeight).GetPadded(-6.f);
+
+    if (mTitleLabel == nullptr)
+    {
+      mTitleLabel = new ITextControl(titleBar, "TONE3000", IText(17.f, EAlign::Near, COLOR_WHITE));
+      AddChildControl(mTitleLabel);
+
+      mStatusLabel = new ITextControl(titleBar, "", IText(12.f, EAlign::Near, PluginColors::HELP_TEXT));
+      AddChildControl(mStatusLabel);
+
+      mHomeButton = new IVButtonControl(
+        titleBar, [this](IControl*) { NavigateHome(); }, "HOME", mStyle);
+      AddChildControl(mHomeButton);
+
+      mSlotButton = new IVButtonControl(
+        titleBar,
+        [this](IControl*) {
+          mTargetSlot = (mTargetSlot + 1) % 4;
+          mSlotButton->SetLabelStr(("Slot " + std::to_string(mTargetSlot + 1)).c_str());
+        },
+        "Slot 1", mStyle);
+      AddChildControl(mSlotButton);
+
+      mCloseButton = new IVButtonControl(
+        titleBar, [this](IControl*) { CloseBrowser(); }, "CLOSE", mStyle);
+      AddChildControl(mCloseButton);
+    }
+
+    auto buttons = titleBar.GetFromRight(250.f);
+    mCloseButton->SetTargetAndDrawRECTs(buttons.GetFromRight(64.f));
+    mSlotButton->SetTargetAndDrawRECTs(buttons.GetFromRight(140.f).GetFromLeft(70.f));
+    mHomeButton->SetTargetAndDrawRECTs(buttons.GetFromLeft(64.f));
+
+    mTitleLabel->SetTargetAndDrawRECTs(titleBar.GetFromLeft(110.f));
+    mStatusLabel->SetTargetAndDrawRECTs(titleBar.GetReducedFromLeft(116.f).GetReducedFromRight(258.f));
+  }
 
   /// Positions the native view, bypassing IWebViewControl::UpdateWebViewBounds.
   ///
   /// That helper is wrong on any scaled display, in two compounding ways.
   /// IWebView::SetWebViewBounds already multiplies x/y/w/h by the scale it is
   /// handed, but UpdateWebViewBounds pre-multiplies as well -- and it uses
-  /// GetDrawScale() (1.0 here) rather than GetTotalScale(), which is what
-  /// carries the OS display scaling. The result is a view placed at logical
-  /// coordinates through a physical-pixel API, landing at 1/scale of where it
-  /// belongs. At 150% that is two thirds across the window, over the rig.
-  ///
-  /// Passing unscaled coordinates with the total scale lets SetWebViewBounds do
-  /// the single multiplication it intends to.
+  /// GetDrawScale() rather than GetTotalScale(), which is what carries the OS
+  /// display scaling. The result lands at 1/scale of where it belongs.
   void PlaceWebView()
   {
     if (mWebView == nullptr || GetUI() == nullptr)
       return;
 
     const auto scale = GetUI()->GetTotalScale();
-    const auto bounds = mCollapsed ? IRECT(0.f, 0.f, 0.f, 0.f) : mContentBounds;
+    const auto bounds = mHide ? IRECT(0.f, 0.f, 0.f, 0.f) : ContentRect();
 
+    mWebView->SetTargetAndDrawRECTs(bounds);
     mWebView->SetWebViewBounds(bounds.L, bounds.T, bounds.W(), bounds.H(), scale);
   }
 
@@ -234,20 +297,15 @@ private:
   {
     PlaceWebView();
 
-    if (!mRedirectUri.empty())
+    if (!mRedirectUri.empty() && !mHide)
       pCaller->LoadURL(SelectToneUrl().c_str());
   }
 
-  std::string SelectToneUrl() const
-  {
-    // prompt=select_tone puts TONE3000 into its "pick one and hand it back"
-    // mode, which is exactly what an in-plugin browser wants.
-    return mController.BuildSelectToneUrl(mPkce, mRedirectUri);
-  }
+  std::string SelectToneUrl() const { return mController.BuildSelectToneUrl(mPkce, mRedirectUri); }
 
   void NavigateHome()
   {
-    if (mWebView != nullptr)
+    if (mWebView != nullptr && !mRedirectUri.empty())
       mWebView->LoadURL(SelectToneUrl().c_str());
   }
 
@@ -257,34 +315,32 @@ private:
       mStatusLabel->SetStr(text.c_str());
   }
 
-  /// Waits for TONE3000 to redirect to the loopback listener with a tone id,
-  /// then downloads that tone into the chosen slot.
   void StartWaitingForSelection()
   {
-    const int slot = mTargetSlot;
-
     mController.AwaitToneSelection(mLoopback, mPkce, mRedirectUri, kSelectionTimeoutMs,
-                                   [this, slot](bool success, std::string pathOrError) {
+                                   [this](bool success, std::string pathOrError) {
                                      if (success && mLoadIntoSlot)
-                                       mLoadIntoSlot(slot, pathOrError.c_str());
+                                       mLoadIntoSlot(mTargetSlot, pathOrError.c_str());
                                    });
   }
 
+  IRECT mEditorBounds;
   nr::net::BrowserController& mController;
   IVStyle mStyle;
   LoadIntoSlotFunc mLoadIntoSlot;
 
   IWebViewControl* mWebView = nullptr;
-  IVButtonControl* mSlotButton = nullptr;
-  IVButtonControl* mCollapseButton = nullptr;
+  ITextControl* mTitleLabel = nullptr;
   ITextControl* mStatusLabel = nullptr;
-
-  IRECT mContentBounds;
-  bool mCollapsed = false;
+  IVButtonControl* mHomeButton = nullptr;
+  IVButtonControl* mSlotButton = nullptr;
+  IVButtonControl* mCloseButton = nullptr;
 
   nr::net::LoopbackServer mLoopback;
   nr::net::PkcePair mPkce;
   std::string mRedirectUri;
 
   int mTargetSlot = 0;
+  bool mDraggingFrame = false;
+  bool mResizing = false;
 };
