@@ -39,6 +39,16 @@ public:
     Failed      ///< last operation failed; see message
   };
 
+  /// Which listing the browser is showing.
+  enum class Tab
+  {
+    Browse,     ///< catalogue search, the only tab that takes filters
+    Favourites, ///< tones the user starred
+    Created,    ///< tones the user captured
+    Recent,     ///< tones the user has downloaded before
+    Local,      ///< the on-disk cache; no network involved
+  };
+
   /// One row in the results list, flattened for display.
   struct Row
   {
@@ -47,7 +57,19 @@ public:
     std::string author;
     std::string gear;
     std::string licence;
+    std::string format;
+    std::string imageUrl; ///< card thumbnail; empty when the tone has no art
+    std::vector<std::string> tags;
     int downloads = 0;
+    int modelsCount = 0;
+
+    /// Whether the star is filled. Only meaningful on the Favourites tab or
+    /// after the user toggles it -- search results carry no per-user state, so
+    /// false means "not known to be starred" rather than "definitely not".
+    bool favourited = false;
+
+    /// Set on the Local tab, where rows come from disk rather than the API.
+    std::string localPath;
   };
 
   /// Everything the UI needs, copied under the lock so it can render without
@@ -57,6 +79,8 @@ public:
     Status status = Status::SignedOut;
     std::string message;
     std::vector<Row> rows;
+    Tab tab = Tab::Browse;
+    std::string username; ///< empty until the identity call lands
     int page = 1;
     int totalPages = 0;
     int total = 0;
@@ -87,6 +111,18 @@ public:
 
   /// Re-runs the last search on a different page.
   void GoToPage(int page);
+
+  /// Switches tabs and loads the first page of that listing. Browse re-runs the
+  /// last search; Local reads the cache directory and touches no network.
+  void ShowTab(Tab tab, int page = 1);
+
+  /// Stars or unstars the tone behind a row, updating it in place so the UI
+  /// does not have to refetch the whole page to redraw one star.
+  void ToggleFavourite(int rowIndex);
+
+  /// The signed-in account name, for the browser's identity strip. Fetched once
+  /// after a session is restored or established.
+  void FetchIdentity();
 
   /// Downloads the best model for a row and reports the file it landed in.
   /// The callback fires on the worker thread; the UI marshals it via its idle
@@ -129,6 +165,19 @@ public:
 
 private:
   void RunAsync(std::function<void()> work);
+
+  /// Copies a fetched page into the snapshot. Shared by search and the
+  /// per-user listings, which differ only in how they were fetched.
+  void PublishPage(const TonePage& results, int fallbackPage);
+
+  /// Fills the rows from the on-disk cache. No network, so it runs inline.
+  void LoadLocalRows();
+
+  /// The identity fetch without the threading, so code already running on a
+  /// worker can call it. Going through FetchIdentity there would be dropped:
+  /// RunAsync refuses to start while an operation is in flight, and the caller
+  /// would be that operation.
+  void RefreshIdentityBlocking();
   void SetStatus(Status status, std::string message);
   void MarkDirty();
 
