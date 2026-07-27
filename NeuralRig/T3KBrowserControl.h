@@ -85,12 +85,7 @@ public:
       return;
 
     mCollapsed = collapsed;
-
-    const auto parked = IRECT(mContentBounds.L, mContentBounds.B + 4000.f, mContentBounds.R,
-                              mContentBounds.B + 4000.f + mContentBounds.H());
-
-    mWebView->SetTargetAndDrawRECTs(collapsed ? parked : mContentBounds);
-    mWebView->OnResize();
+    PlaceWebView();
 
     if (mCollapseButton != nullptr)
       mCollapseButton->SetLabelStr(collapsed ? "SHOW" : "HIDE");
@@ -99,6 +94,10 @@ public:
   }
 
   bool IsCollapsed() const { return mCollapsed; }
+
+  /// Keep the native view with its section when the host rescales the editor;
+  /// the base class would reposition it through the broken path.
+  void OnRescale() override { PlaceWebView(); }
 
   void OnAttached() override
   {
@@ -208,13 +207,32 @@ private:
   static constexpr float kHeaderHeight = NR_BROWSER_HEADER_HEIGHT;
   static constexpr int kSelectionTimeoutMs = 600000; // ten minutes of browsing
 
+  /// Positions the native view, bypassing IWebViewControl::UpdateWebViewBounds.
+  ///
+  /// That helper is wrong on any scaled display, in two compounding ways.
+  /// IWebView::SetWebViewBounds already multiplies x/y/w/h by the scale it is
+  /// handed, but UpdateWebViewBounds pre-multiplies as well -- and it uses
+  /// GetDrawScale() (1.0 here) rather than GetTotalScale(), which is what
+  /// carries the OS display scaling. The result is a view placed at logical
+  /// coordinates through a physical-pixel API, landing at 1/scale of where it
+  /// belongs. At 150% that is two thirds across the window, over the rig.
+  ///
+  /// Passing unscaled coordinates with the total scale lets SetWebViewBounds do
+  /// the single multiplication it intends to.
+  void PlaceWebView()
+  {
+    if (mWebView == nullptr || GetUI() == nullptr)
+      return;
+
+    const auto scale = GetUI()->GetTotalScale();
+    const auto bounds = mCollapsed ? IRECT(0.f, 0.f, 0.f, 0.f) : mContentBounds;
+
+    mWebView->SetWebViewBounds(bounds.L, bounds.T, bounds.W(), bounds.H(), scale);
+  }
+
   void OnWebViewReady(IWebViewControl* pCaller)
   {
-    // IWebViewControl::OnAttached places the native view at unscaled
-    // coordinates, while every later update multiplies by the draw scale. On a
-    // scaled display those disagree and the view lands outside its column,
-    // over the rig. Forcing a resize once the view exists reconciles them.
-    pCaller->OnResize();
+    PlaceWebView();
 
     if (!mRedirectUri.empty())
       pCaller->LoadURL(SelectToneUrl().c_str());
