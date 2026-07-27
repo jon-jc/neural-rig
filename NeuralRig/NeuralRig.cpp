@@ -146,7 +146,15 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
 
     const auto b = pGraphics->GetBounds();
-    const auto mainArea = b.GetPadded(-20);
+
+    // The amp section keeps upstream's exact 600x400 geometry, because its
+    // background is a fixed-size photograph -- stretching it to a taller window
+    // is what made the earlier layout spill past the artwork. Everything new
+    // lives below it on drawn panels.
+    const auto ampSection = b.GetFromTop(NR_AMP_SECTION_HEIGHT);
+    const auto rackSection = b.GetReducedFromTop(NR_AMP_SECTION_HEIGHT);
+
+    const auto mainArea = ampSection.GetPadded(-20);
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
@@ -173,24 +181,36 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Areas for model and IR
     const auto fileWidth = 200.0f;
     const auto fileHeight = 30.0f;
-    const auto irYOffset = 38.0f;
-    // The capture chain stacks one browser per slot, signal flowing top to
-    // bottom. Slot 0 sits highest; the last slot keeps the position upstream's
-    // single browser had, so the IR row below it is undisturbed.
-    const auto slotPitch = 26.0f;
-    const auto modelArea =
-      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
+    // The capture chain lives in its own panel below the amp, signal flowing
+    // top to bottom so the layout reads in the order the audio travels.
+    const auto rackPad = rackSection.GetPadded(-14.f);
+    const auto chainGroup = rackPad.GetFromTop(150.f);
+    const auto chainRows = chainGroup.GetPadded(-10.f).GetReducedFromTop(14.f);
+    const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
+
     auto slotArea = [&](size_t slot) {
-      const auto fromBottom = static_cast<float>(kNumSlots - 1 - slot);
-      return modelArea.GetVShifted(-slotPitch * fromBottom);
+      return chainRows.GetFromTop(slotPitch)
+        .GetVShifted(slotPitch * static_cast<float>(slot))
+        .GetPadded(-2.f)
+        // Leave room on the left for the slot number and flow arrow.
+        .GetReducedFromLeft(30.f);
     };
+
+    auto slotNumberArea = [&](size_t slot) {
+      return chainRows.GetFromTop(slotPitch)
+        .GetVShifted(slotPitch * static_cast<float>(slot))
+        .GetFromLeft(28.f);
+    };
+
+    const auto cabinetGroup = rackPad.GetFromBottom(rackPad.H() - 158.f);
+    const auto irArea = cabinetGroup.GetPadded(-10.f).GetReducedFromTop(14.f).GetFromTop(fileHeight);
+    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+
+    // Kept in the amp section, next to where the single model used to sit.
+    const auto modelArea = contentArea.GetFromBottom(fileHeight).GetMidHPadded(fileWidth);
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    // Sits under the rack, where the eye lands after reading the chain.
-    const auto browseButtonArea = slotArea(0).GetVShifted(-30.f).GetFromLeft(110.f).GetHShifted(-46.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
-    const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
 
     // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
@@ -235,9 +255,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       }
     };
 
-    pGraphics->AttachBackground(BACKGROUND_FN);
+    // Fill the whole window first, then place the artwork at its native size in
+    // the amp section only.
+    pGraphics->AttachPanelBackground(PluginColors::NAM_1);
+    pGraphics->AttachControl(new IBitmapControl(ampSection, backgroundBitmap))->SetIgnoreMouse(true);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -248,13 +271,44 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const std::string defaultIRString = "Select IR...";
 #endif
     // Getting started page listing additional resources
-    const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
+    // Cabinet IRs are .wav, which the in-plugin browser does not handle -- it
+    // asks TONE3000 for NAM captures only. So the IR globe still opens a web
+    // page, pointed at TONE3000's IR catalogue rather than upstream's page.
+    auto browseForIRs = [](IControl* pCaller) {
+      WDL_String url("https://www.tone3000.com/search?formats=ir");
+      pCaller->GetUI()->OpenURL(url.Get());
+    };
+    // Bordered, labelled sections so the signal path is legible at a glance.
+    const auto groupStyle = style.WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.4f))
+                              .WithLabelText(IText(14.f, EAlign::Near, PluginColors::HELP_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(chainGroup, "CAPTURE CHAIN", 8.f, groupStyle));
+    pGraphics->AttachControl(new IVGroupControl(cabinetGroup, "CABINET", 8.f, groupStyle));
+
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
+      // Slot number plus a downward arrow, so it reads as a chain rather than
+      // four unrelated file pickers.
+      const auto numberText = IText(13.f, EAlign::Center, PluginColors::NAM_THEMECOLOR);
+      const auto label = std::to_string(slot + 1) + (slot + 1 < kNumSlots ? "\n|" : "");
+      pGraphics->AttachControl(new ITextControl(slotNumberArea(slot), label.c_str(), numberText));
+
+      // The globe opens the in-plugin TONE3000 browser aimed at this slot, so
+      // picking a capture fills the row the user clicked. Upstream sends the
+      // user to a web page instead, which leaves them to download, unzip and
+      // find the file by hand.
+      auto browseForSlot = [pGraphics, slot, this](IControl*) {
+        auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
+        mBrowser.Begin();
+        page->SetTargetSlot(static_cast<int>(slot));
+        page->Refresh();
+        page->Hide(false);
+      };
+
       pGraphics->AttachControl(
         new NAMFileBrowserControl(slotArea(slot), kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
                                   makeLoadModelCompletionHandler(slot), style, fileSVG, crossSVG, leftArrowSVG,
-                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
+                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Browse TONE3000", browseForSlot),
         ModelBrowserCtrlTag(slot));
     }
 
@@ -285,7 +339,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl),
+                                "Get IRs from TONE3000", browseForIRs),
       kCtrlTagIRFileBrowser);
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
@@ -331,17 +385,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         mPendingLoads.emplace_back(slot, std::string(filePath));
       });
 
+      // No separate "browse" button: each slot's globe opens this page aimed at
+      // that slot, which is where a user looking to fill a slot actually
+      // reaches for.
       pGraphics->AttachControl(browserPage, kCtrlTagT3KBrowser)->Hide(true);
-
-      pGraphics->AttachControl(new IVButtonControl(
-        browseButtonArea,
-        [pGraphics, this](IControl*) {
-          auto* page = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser)->As<T3KBrowserPageControl>();
-          mBrowser.Begin();
-          page->Refresh();
-          page->Hide(false);
-        },
-        "TONE3000", style));
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);

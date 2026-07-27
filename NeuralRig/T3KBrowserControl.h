@@ -44,6 +44,17 @@ public:
 
   void SetLoadIntoSlotFunc(LoadIntoSlotFunc func) { mLoadIntoSlot = std::move(func); }
 
+  /// Preselects which chain slot a picked capture lands in. Called when the
+  /// user opens the browser from a specific slot's globe, so the thing they
+  /// clicked is the thing that gets filled.
+  void SetTargetSlot(int slot)
+  {
+    mTargetSlot = std::max(0, std::min(slot, 3));
+
+    if (mSlotButton != nullptr)
+      RefreshFilterLabels();
+  }
+
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
     if (key.VK == kVK_ESCAPE)
