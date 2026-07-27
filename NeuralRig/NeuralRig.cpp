@@ -17,6 +17,7 @@
 
 #include "NeuralRigControls.h"
 #include "RigSlotControl.h"
+#include "StatusBar.h"
 #include "T3KBrowserPanel.h"
 #include "Theme.h"
 
@@ -157,7 +158,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
     // bottom here is reading the signal path. The browser floats above all of
     // it, so it takes no space here.
-    auto remaining = b.GetPadded(-14.f);
+    // The status strip is carved off first so nothing else can claim it and
+    // the browser panel has a hard floor to stop above.
+    const auto statusBarArea = b.GetFromBottom(38.f);
+
+    auto remaining = b.GetReducedFromBottom(38.f).GetPadded(-14.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
@@ -439,7 +444,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // window. A fixed 58% overlapped the bottom of the rig, hiding the cab
       // slot and the knob row behind it; deriving the top from the layout means
       // the two can never collide however the sections above are tuned.
-      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, b.B);
+      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, statusBarArea.T);
 
       auto* browserPanel = new nr::browser::T3KBrowserPanel(
         browserPanelArea, mBrowser,
@@ -477,6 +482,8 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           pGraphics->SetAllControlsDirty();
         }),
         kCtrlTagBrowserToggle);
+
+      pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -719,6 +726,18 @@ void NeuralRig::OnIdle()
   {
     if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
       static_cast<nr::browser::T3KBrowserPanel*>(panel)->Poll();
+
+    if (auto* status = pGraphics->GetControlWithTag(kCtrlTagStatusBar))
+    {
+      // GetSnapshot copies under the lock and does not touch the dirty flag,
+      // so reading it here cannot starve the panel of its redraw.
+      const auto snapshot = mBrowser.GetSnapshot();
+
+      auto* bar = static_cast<nr::shell::StatusBarControl*>(status);
+      bar->SetTransport(GetSampleRate(), GetLatency());
+      bar->SetApiStatus(snapshot.message,
+                        snapshot.status == nr::net::BrowserController::Status::Working);
+    }
   }
 
   if (mNewModelLoadedInDSP)
