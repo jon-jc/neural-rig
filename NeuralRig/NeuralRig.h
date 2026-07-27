@@ -25,7 +25,11 @@ constexpr size_t kNumChannelsInternal = 1;
 
 // Capture slots in the chain. Each is a full network evaluation per sample, so
 // four is both a heavy load and enough for pedal into amp into a second stage.
-constexpr size_t kNumSlots = 4;
+/// Three typed slots -- pedal, amp, cab -- rather than four interchangeable
+/// ones. Four said nothing about what belonged where; three named stages read
+/// as a signal path, and the type seeds the browser's gear filter so each slot
+/// opens the catalogue already narrowed to what can go in it.
+constexpr size_t kNumSlots = 3;
 
 // Capacity of each slot's bypass delay line, allocated once so ProcessBlock
 // never allocates. Resampling latency is a few hundred samples at most.
@@ -64,7 +68,6 @@ enum EParams
   kSlot1Active,
   kSlot2Active,
   kSlot3Active,
-  kSlot4Active,
   kNumParams
 };
 
@@ -96,6 +99,7 @@ enum ECtrlTags
   kCtrlTagSlimKnob,
   kCtrlTagT3KBrowser,
   kCtrlTagChainFlow,
+  kCtrlTagBrowserToggle,
   kNumCtrlTags
 };
 

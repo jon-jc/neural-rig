@@ -16,6 +16,7 @@
 #include "architecture.hpp"
 
 #include "NeuralRigControls.h"
+#include "RigSlotControl.h"
 #include "T3KBrowserPanel.h"
 #include "Theme.h"
 
@@ -176,56 +177,53 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto toggleBlockHeight = switchHeight + 30.f;
     const auto groupChrome = 28.f; // border and label
 
-    // --- Amp: knobs across the full width, with meters bracketing them -------
-    const auto ampGroupHeight = knobBlockHeight + toggleBlockHeight + groupChrome;
-    const auto ampGroup = remaining.GetFromTop(ampGroupHeight);
-    remaining = remaining.GetReducedFromTop(ampGroupHeight + 10.f);
+    // --- Rig: three typed slots across, one knob row beneath -----------------
+    //
+    // Previously three stacked groups -- amp knobs, then a vertical list of
+    // four file rows, then a cabinet row -- which read as a form to fill in.
+    // A rig reads left to right: what the signal hits first is leftmost, and
+    // the controls that shape all of it sit underneath in a single row.
+    const auto slotCardHeight = 132.f;
+    const auto rigGroupHeight = slotCardHeight + knobBlockHeight + groupChrome + 18.f;
+    const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
+    remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
 
-    const auto ampInner = ampGroup.GetPadded(-12.f).GetReducedFromTop(14.f);
-    const auto inputMeterArea = ampInner.GetFromLeft(22.f).GetMidVPadded(78.f);
-    const auto outputMeterArea = ampInner.GetFromRight(22.f).GetMidVPadded(78.f);
+    const auto rigInner = rigGroup.GetPadded(-12.f).GetReducedFromTop(6.f);
 
-    const auto knobsArea = ampInner.GetReducedFromLeft(44.f).GetReducedFromRight(44.f).GetFromTop(NAM_KNOB_HEIGHT);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetMidHPadded(52.f);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(52.f);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetMidHPadded(52.f);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(52.f);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetMidHPadded(52.f);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
+    // Meters bracket the whole rig rather than just the knobs, so input and
+    // output sit at the two ends of the path they actually measure.
+    const auto inputMeterArea = rigInner.GetFromLeft(20.f).GetMidVPadded(rigInner.H() * 0.42f);
+    const auto outputMeterArea = rigInner.GetFromRight(20.f).GetMidVPadded(rigInner.H() * 0.42f);
 
-    // Toggles sit under the knob they belong to. The control draws its own
-    // caption inside its bounds, so it needs the whole block -- handing it only
-    // the switch height is what made the label collide with the switch and both
-    // awkward to hit.
-    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(44.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(44.f);
+    const auto stage = rigInner.GetReducedFromLeft(34.f).GetReducedFromRight(34.f);
 
-    // --- Capture chain ------------------------------------------------------
-    const auto fileHeight = 32.0f;
-    const auto chainGroupHeight = fileHeight * static_cast<float>(kNumSlots) * 1.45f + groupChrome;
-    const auto chainGroup = remaining.GetFromTop(chainGroupHeight);
-    remaining = remaining.GetReducedFromTop(chainGroupHeight + 10.f);
-
-    const auto chainRows = chainGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
-    const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
-
-    auto slotRow = [&](size_t slot) {
-      return chainRows.GetFromTop(slotPitch).GetVShifted(slotPitch * static_cast<float>(slot));
-    };
-    // Left gutter carries the slot number and the connector between stages.
-    auto slotNumberArea = [&](size_t slot) { return slotRow(slot).GetFromLeft(34.f); };
+    const auto slotRowArea = stage.GetFromTop(slotCardHeight);
     auto slotArea = [&](size_t slot) {
-      return slotRow(slot).GetReducedFromLeft(38.f).GetMidVPadded(fileHeight * 0.5f);
+      return slotRowArea.GetGridCell(0, static_cast<int>(slot), 1, static_cast<int>(kNumSlots)).GetPadded(-6.f);
     };
 
-    // --- Cabinet ------------------------------------------------------------
-    const auto cabinetGroupHeight = fileHeight + groupChrome + 12.f;
-    const auto cabinetGroup = remaining.GetFromTop(cabinetGroupHeight);
-    remaining = remaining.GetReducedFromTop(cabinetGroupHeight + 10.f);
+    const auto knobsArea = stage.GetReducedFromTop(slotCardHeight + 14.f).GetFromTop(NAM_KNOB_HEIGHT);
+    const auto noiseGateArea = knobsArea.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(46.f);
+    const auto inputKnobArea = knobsArea.GetGridCell(0, 1, 1, numKnobs).GetMidHPadded(46.f);
+    const auto bassKnobArea = knobsArea.GetGridCell(0, 2, 1, numKnobs).GetMidHPadded(46.f);
+    const auto midKnobArea = knobsArea.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(46.f);
+    const auto trebleKnobArea = knobsArea.GetGridCell(0, 4, 1, numKnobs).GetMidHPadded(46.f);
+    const auto outputKnobArea = knobsArea.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(46.f);
 
-    const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
+    // The two toggles keep their function but move out of the knob row, which
+    // in the target layout carries knobs only. They sit as small switches
+    // beneath the knob each one gates.
+    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + NAM_KNOB_HEIGHT).GetFromTop(switchHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
+
+    // The IR toggle rides with the cab slot, which is what it switches.
+    const auto irArea = slotArea(kNumSlots - 1);
+    const auto irSwitchArea = irArea.GetFromTop(20.f).GetFromRight(52.f).GetReducedFromRight(24.f);
+
+    // The BROWSER handle, centred under the rig where the panel will appear.
+    const auto browserToggleArea = remaining.GetFromTop(30.f).GetMidHPadded(60.f);
+    remaining = remaining.GetReducedFromTop(36.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -294,42 +292,45 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Raised, titled panels rather than wire-frame groups: a filled surface a
     // step lighter than the chassis, a shadow under it and a lit top edge do
     // far more to separate sections than a drawn border does.
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(ampGroup, "AMP"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(chainGroup, "CAPTURE CHAIN"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(cabinetGroup, "CABINET"));
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(rigGroup, ""));
 
-    // The connector threading the capture slots together. Without it the rows
-    // read as four unrelated file pickers rather than a signal path.
-    pGraphics->AttachControl(
-      new nr::theme::ChainFlowControl(chainRows.GetFromLeft(34.f), static_cast<int>(kNumSlots), slotPitch),
-      kCtrlTagChainFlow);
+    // One card per stage. Clicking anywhere on a card opens the browser
+    // already filtered to what can go in it, so choosing a pedal never means
+    // scrolling past amps first.
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumSlots] = {
+      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab};
 
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
-      // Slot numbers are drawn by ChainFlowControl, on its connector, so they
-      // sit on the signal path rather than beside it.
+      const auto kind = kSlotKinds[slot];
 
-      // The globe opens the in-plugin TONE3000 browser aimed at this slot, so
-      // picking a capture fills the row the user clicked. Upstream sends the
-      // user to a web page instead, which leaves them to download, unzip and
-      // find the file by hand.
-      // The globe opens the floating browser aimed at this slot, so whatever is
-      // picked lands in the row that was clicked.
-      auto browseForSlot = [this, pGraphics, slot](IControl*) {
-        mBrowserTargetSlot = static_cast<int>(slot);
+      auto browseForSlot = [this, pGraphics, kind](int slotIndex) {
+        mBrowserTargetSlot = slotIndex;
 
-        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-        {
-          panel->Hide(false);
-          panel->SetDirty(false);
-        }
+        auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
+
+        if (panel == nullptr)
+          return;
+
+        panel->Hide(false);
+
+        const auto gears = nr::rig::SlotGears(kind);
+        std::string joined;
+
+        for (const auto& gear : gears)
+          joined += joined.empty() ? gear : "_" + gear;
+
+        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind));
+        pGraphics->SetAllControlsDirty();
       };
 
-      pGraphics->AttachControl(
-        new NAMFileBrowserControl(slotArea(slot), kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
-                                  makeLoadModelCompletionHandler(slot), style, fileSVG, crossSVG, leftArrowSVG,
-                                  rightArrowSVG, fileBackgroundBitmap, globeSVG, "Browse TONE3000", browseForSlot),
-        ModelBrowserCtrlTag(slot));
+      auto clearSlot = [this](int slotIndex) {
+        SendArbitraryMsgFromUI(kMsgTagClearModel, ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0, nullptr);
+      };
+
+      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(slot), static_cast<int>(slot), kind,
+                                                           SlotActiveParam(slot), browseForSlot, clearSlot),
+                               ModelBrowserCtrlTag(slot));
     }
 
     auto hideSlimOverlay = [](IControl* pCaller) {
@@ -433,6 +434,16 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         });
 
       pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(true);
+
+      // The handle that opens it without going through a slot.
+      pGraphics->AttachControl(
+        new nr::rig::BrowserToggleControl(browserToggleArea, [pGraphics](bool open) {
+          if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+            panel->Hide(!open);
+
+          pGraphics->SetAllControlsDirty();
+        }),
+        kCtrlTagBrowserToggle);
     }
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -639,24 +650,31 @@ void NeuralRig::OnIdle()
   // signal path shows where audio actually flows.
   if (auto* pGraphics = GetUI())
   {
-    if (auto* flow = pGraphics->GetControlWithTag(kCtrlTagChainFlow))
+    // Push each slot's capture name into its card. The cards draw the name
+    // themselves rather than owning the path, so this is the one place the
+    // rig's actual contents reach the UI.
+    for (size_t slot = 0; slot < kNumSlots; slot++)
     {
-      std::vector<bool> occupied(kNumSlots, false);
-      bool changed = false;
+      const bool occupied = mNAMPaths[slot].GetLength() > 0;
 
-      for (size_t slot = 0; slot < kNumSlots; slot++)
+      if (occupied == mFlowOccupancy[slot])
+        continue;
+
+      mFlowOccupancy[slot] = occupied;
+
+      if (auto* card = pGraphics->GetControlWithTag(ModelBrowserCtrlTag(slot)))
       {
-        occupied[slot] = mNAMPaths[slot].GetLength() > 0;
+        std::string name;
 
-        if (occupied[slot] != mFlowOccupancy[slot])
+        if (occupied)
         {
-          mFlowOccupancy[slot] = occupied[slot];
-          changed = true;
+          // Show the file's stem: the full path is meaningless in a card this
+          // size, and the stem is what the capture is actually called.
+          name = std::filesystem::path(mNAMPaths[slot].Get()).stem().string();
         }
-      }
 
-      if (changed)
-        static_cast<nr::theme::ChainFlowControl*>(flow)->SetOccupancy(occupied);
+        static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+      }
     }
   }
 

@@ -110,6 +110,20 @@ public:
     mIgnoreMouse = false;
   }
 
+  /// Opens the catalogue pre-filtered to a slot's gear types.
+  ///
+  /// The API joins multi-select gears with underscores, and the controller
+  /// takes a single gear string which it then joins -- joining a one-element
+  /// list yields that element unchanged, so passing the already-joined form
+  /// through works and keeps the controller's signature simple.
+  void FocusGears(const std::string& joinedGears, const char* displayLabel)
+  {
+    mGear = joinedGears;
+    mGearLabel = displayLabel != nullptr ? displayLabel : "All gear";
+    mScrollOffset = 0.f;
+    RunSearch(1);
+  }
+
   void OnResize() override { LayOut(); }
 
   void OnAttached() override
@@ -272,6 +286,7 @@ public:
       // Index 0 is "All", so the vocabulary is offset by one.
       const auto gears = nr::net::GearOptions();
       mGear = chosen == 0 ? std::string{} : gears[static_cast<size_t>(chosen - 1)];
+      mGearLabel = chosen == 0 ? "All gear" : GearLabel(mGear, {});
     }
     else if (valIdx == kSortValIdx)
     {
@@ -453,8 +468,7 @@ private:
 
   void DrawFilters(IGraphics& g)
   {
-    const std::string gearLabel = mGear.empty() ? "All gear" : GearLabel(mGear, {});
-    DrawPill(g, mGearRect, gearLabel.c_str(), PluginColors::INK_MUTED, false, true);
+    DrawPill(g, mGearRect, mGearLabel.c_str(), PluginColors::INK_MUTED, false, true);
     DrawPill(g, mSortRect, SortLabel(mSort), PluginColors::INK_MUTED, false, true);
   }
 
@@ -632,6 +646,7 @@ private:
 
   std::string mQuery;
   std::string mGear;
+  std::string mGearLabel = "All gear"; ///< what the pill shows; mGear is the API value
   std::string mSort = "trending";
 
   IPopupMenu mGearMenu;
