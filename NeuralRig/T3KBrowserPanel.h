@@ -66,6 +66,43 @@ inline const char* GearLabel(const std::string& gear, const std::string& format)
   return "CAPTURE";
 }
 
+/**
+    One entry in the filter menu.
+
+    This used to be "All gear" prepended to GearOptions(), with the selected
+    index mapped back by subtracting one. Index arithmetic against a menu built
+    somewhere else is exactly the kind of thing that silently goes wrong -- and
+    did -- so the label and the values it sends now travel together and the
+    chosen index is only ever used to look up a row.
+
+    It also makes room for IR, which has no gear value at all: an impulse
+    response is a *format*, so filtering for one means format=ir with the gear
+    filter left open. Expressing that as a gear was impossible before.
+*/
+struct GearFilter
+{
+  const char* label;
+  const char* gears;  ///< underscore-joined gear values, empty for any
+  const char* format; ///< format value, empty for any
+};
+
+inline const std::vector<GearFilter>& GearFilters()
+{
+  static const std::vector<GearFilter> filters = {
+    {"All gear", "", ""},
+    {"Amps", "amp", ""},
+    {"Amp & Cab", "amp-cab", ""},
+    {"Pedals", "pedal", ""},
+    {"Cabs", "cab", ""},
+    {"IRs", "", "ir"},
+    {"Outboard", "outboard", ""},
+    {"Space", "space", ""},
+    {"Experimental", "experimental", ""},
+  };
+
+  return filters;
+}
+
 /// Badge colour for a gear type.
 inline IColor GearColor(const std::string& gear, const std::string& format)
 {
@@ -116,9 +153,10 @@ public:
   /// takes a single gear string which it then joins -- joining a one-element
   /// list yields that element unchanged, so passing the already-joined form
   /// through works and keeps the controller's signature simple.
-  void FocusGears(const std::string& joinedGears, const char* displayLabel)
+  void FocusGears(const std::string& joinedGears, const char* displayLabel, const std::string& format = {})
   {
     mGear = joinedGears;
+    mFormat = format;
     mGearLabel = displayLabel != nullptr ? displayLabel : "All gear";
     mScrollOffset = 0.f;
     RunSearch(1);
@@ -283,10 +321,15 @@ public:
 
     if (valIdx == kGearValIdx)
     {
-      // Index 0 is "All", so the vocabulary is offset by one.
-      const auto gears = nr::net::GearOptions();
-      mGear = chosen == 0 ? std::string{} : gears[static_cast<size_t>(chosen - 1)];
-      mGearLabel = chosen == 0 ? "All gear" : GearLabel(mGear, {});
+      const auto& filters = GearFilters();
+
+      if (chosen < 0 || chosen >= static_cast<int>(filters.size()))
+        return;
+
+      const auto& filter = filters[static_cast<size_t>(chosen)];
+      mGear = filter.gears;
+      mFormat = filter.format;
+      mGearLabel = filter.label;
     }
     else if (valIdx == kSortValIdx)
     {
@@ -369,7 +412,7 @@ private:
     // Search sets the Browse tab itself. Calling ShowTab first would route back
     // into a search with the previous query, claim the one allowed in-flight
     // operation, and get this one dropped.
-    mController.Search(mQuery, mGear, mSort, 0, page);
+    mController.Search(mQuery, mGear, mSort, 0, page, mFormat);
     SetDirty(false);
   }
 
@@ -388,10 +431,9 @@ private:
   void ShowGearMenu()
   {
     mGearMenu.Clear();
-    mGearMenu.AddItem("All gear");
 
-    for (const auto& gear : nr::net::GearOptions())
-      mGearMenu.AddItem(GearLabel(gear, {}));
+    for (const auto& filter : GearFilters())
+      mGearMenu.AddItem(filter.label);
 
     GetUI()->CreatePopupMenu(*this, mGearMenu, mGearRect, kGearValIdx);
   }
@@ -645,6 +687,7 @@ private:
 
   std::string mQuery;
   std::string mGear;
+  std::string mFormat; ///< format filter; IR is a format, not a gear
   std::string mGearLabel = "All gear"; ///< what the pill shows; mGear is the API value
   std::string mSort = "trending";
 
