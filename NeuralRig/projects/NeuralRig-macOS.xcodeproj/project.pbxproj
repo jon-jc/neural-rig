@@ -431,7 +431,7 @@
 		4FFBB93520863B0E00DDD0E7 /* vstnoteexpressiontypes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F81588E205D50EB00393585 /* vstnoteexpressiontypes.cpp */; };
 		AA341E1D2B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		E95177500904F39724FA33E6 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		4620C42062F3C14A3FC3AE1E /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		4620C42062F3C14A3FC3AE1E /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		5361924B4F2ADB6021C928CE /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		68EE50220E658A732B0D289B /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		AFCA3A4D92787C3FEABD4A2E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -439,7 +439,7 @@
 		915DC9959367F8E09C67D4D0 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E1F2B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		53EFADA4D42954AA08A0680F /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		85AA3B6A641CD2A5288F1D76 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		85AA3B6A641CD2A5288F1D76 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		8B0BF5363C4AE38DC1462489 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		1143CEBFF16E0F90A21FE880 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		11E4AA30FAC6023C82AA4C14 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -447,7 +447,7 @@
 		35BF3BDA3D6A89EDF1CF93E9 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E202B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		EBE1C0F2A2DC2F5518BF3A45 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		6288EF0F0DC61F115807A778 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		6288EF0F0DC61F115807A778 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		F502DCD481DE018180F14BEA /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		D4578DD18D248873427CD9DC /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		3E5DF653A28978E40DE9CEB3 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -455,7 +455,7 @@
 		6ABD568451BDE68439729213 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E212B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		E68415BDFE34AAFC64304819 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		3B02BD799E153BC94CAD7DC9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		3B02BD799E153BC94CAD7DC9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		646F37E44379E47E303DC633 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		19A22A1437BC1C92E675FCCF /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		0974605EBF5C26A2CADB3431 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -463,7 +463,7 @@
 		3CE855990F3FA702F2FF0F50 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E222B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		DB2713B9708E0A87D6DD795F /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		FDAFFF4B7952638CB09463E3 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		FDAFFF4B7952638CB09463E3 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		0ACEDE1CE29A04E2F0B056E9 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		393FC449EA5771064EB34517 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		53B900D56BE14073713F8C54 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -471,14 +471,14 @@
 		0366EA97872C86AEBB864761 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E232B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		57CC9CED887BAA97F8841B3B /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		EF097509D9ADA296B4D042EA /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		EF097509D9ADA296B4D042EA /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		614FE9F564E2BF5BA594D1D2 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		54063A69E0FAA9A1CED4977F /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		095707B9CB4982BB9AEB4A4E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
 		C7E76FB7870EE24EEBB7A720 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2C0567E4D73D8875DC945014 /* PlatformMac.mm */; };
 		86239D5BFC40E1180C4C7581 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E242B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
-		180C2D8687783D603BADB0B9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		180C2D8687783D603BADB0B9 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		D991D586EFD288174230C1A5 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		FE0AF98B7469415DFC6F1897 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		11ED27A340F7E84AFDD4184E /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -486,7 +486,7 @@
 		F9D0A4CCE78813DF28D28C48 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E252B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		DDCAC5DDB970CE999F049001 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		DF11CE03058333F326AAEA45 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		DF11CE03058333F326AAEA45 /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		918455EEDA8D80CCEEF46862 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		4A0807C781B683E30972F44F /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		D0235C00800DE1A98693B933 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
@@ -494,7 +494,7 @@
 		0512A454660C358604AE5953 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E8AEE29576CF2A2D5BB3B11 /* PlatformCommon.cpp */; };
 		AA341E262B9E5A530069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E1B2B9E5A530069C260 /* ToneStack.cpp */; };
 		55A73B3FDBEF4B7413B8E2D5 /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 001832C0FD27E73AFA308A0F /* linear.cpp */; };
-		C8E780522161096EEFDF8FBD /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; };
+		C8E780522161096EEFDF8FBD /* IPlugWebView.mm in Sources */ = {isa = PBXBuildFile; fileRef = BF37075A6764B9653CCECAA5 /* IPlugWebView.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		0577AD3050B7E59AB8F81FDB /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8645DD8DD7291253F750E980 /* BrowserController.cpp */; };
 		C6C610A39385531947BB8EBE /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDD53E050901EDDECC5460 /* LoopbackServer.cpp */; };
 		71534EE8691510CB18EEBD04 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 532BABFD4AED43F585A5EDFA /* Tone3000Client.cpp */; };
