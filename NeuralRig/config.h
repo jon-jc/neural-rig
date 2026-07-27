@@ -37,9 +37,16 @@
 // anything IGraphics paints. Docking it either steals space permanently or is
 // too small to browse in, so it floats and gets out of the way on demand.
 #define PLUG_WIDTH 1120
-#define PLUG_HEIGHT 880
+// The open height. Everything above the browser is a fixed size, so every
+// pixel added here becomes another row of catalogue results. Kept under 1040
+// so the whole window still fits on a 1080p screen above the taskbar.
+#define PLUG_HEIGHT 1000
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
+// Fixed size. Scaling the UI to an arbitrary window shape letterboxes it --
+// the layout holds one aspect ratio, so any other window shape leaves an
+// unpainted strip beside it -- and snapping the window back to the UI's shape
+// fought the platform badly enough to send it to 4480x3520.
 #define PLUG_HOST_RESIZE 0
 #define PLUG_MAX_WIDTH PLUG_WIDTH * 4
 #define PLUG_MAX_HEIGHT PLUG_HEIGHT * 4

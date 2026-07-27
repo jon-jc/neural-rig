@@ -21,6 +21,7 @@
 #include "StatusBar.h"
 #include "T3KBrowserPanel.h"
 #include "Theme.h"
+#include "WindowChrome.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -125,7 +126,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
   };
 
   mLayoutFunc = [&](IGraphics* pGraphics) {
-    pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
+
     pGraphics->AttachTextEntryControl();
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
@@ -159,18 +160,40 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // hand, so nothing can overlap however the numbers are tuned. Reading top to
     // bottom here is reading the signal path. The browser floats above all of
     // it, so it takes no space here.
-    // The status strip is carved off first so nothing else can claim it and
-    // the browser panel has a hard floor to stop above.
-    const auto statusBarArea = b.GetFromBottom(38.f);
-
-    auto remaining = b.GetReducedFromBottom(38.f).GetPadded(-14.f);
+    // Everything is laid out once, for the *open* window height, and never
+    // re-laid out. Collapsing the browser shrinks the window instead, which is
+    // why the order here matters: the browser panel is last, below the status
+    // strip, so cutting the window off above it removes the browser and
+    // nothing else.
+    //
+    // Laying out again on resize was the earlier approach and it rebuilt every
+    // control -- which crashed when triggered from a control's own handler, and
+    // painted a blank window when it survived.
+    auto remaining = b.GetPadded(-14.f);
 
     const auto headerArea = remaining.GetFromTop(46.f);
     remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
-    const auto titleArea = headerArea.GetFromLeft(320.f);
-    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
-    const auto presetBarArea = headerArea.GetMidHPadded(190.f).GetMidVPadded(15.f);
+    // The header is divided into lanes that cannot overlap, rather than each
+    // element being centred or anchored independently and hoping they miss.
+    // Left to right: File and Options, the wordmark, the preset bar, then the
+    // window buttons. The wordmark used to run to x=464 while the preset bar
+    // began at x=370, so the two collided and the model icon sat on top of the
+    // word PRESETS.
+    const auto titleArea = headerArea.GetReducedFromLeft(140.f).GetFromLeft(286.f);
+    // Caption-bar buttons, right to left in the usual order. No maximise: the
+    // layout holds one size, so offering one would be a button that lies.
+    const auto closeButtonArea = headerArea.GetFromRight(30.f).GetMidVPadded(15.f);
+    const auto minimiseButtonArea = closeButtonArea.GetHShifted(-36.f);
+
+    // File and Options, where the OS menu bar used to be but inside the
+    // plugin's own surface so they follow the theme.
+    const auto fileMenuArea = headerArea.GetFromLeft(58.f).GetMidVPadded(13.f);
+    const auto optionsMenuArea = fileMenuArea.GetHShifted(62.f);
+    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-76.f).GetMidVPadded(17.f);
+    // Between the wordmark's lane and the window buttons', not centred on the
+    // window -- centring is what walked it into the title.
+    const auto presetBarArea = headerArea.GetReducedFromLeft(456.f).GetReducedFromRight(146.f).GetMidVPadded(15.f);
 
     // Section heights are derived from what they hold rather than guessed. The
     // FX group previously got less than a knob row plus a toggle row, so the
@@ -191,7 +214,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // A rig reads left to right: what the signal hits first is leftmost, and
     // the controls that shape all of it sit underneath in a single row.
     const auto slotCardHeight = 146.f;
-    const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + switchHeight + groupChrome + 12.f;
+    const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + toggleBlockHeight + groupChrome + 12.f;
     const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
     remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
 
@@ -204,9 +227,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto stage = rigInner.GetReducedFromLeft(34.f).GetReducedFromRight(34.f);
 
+    // Four cards: the three capture slots plus the cabinet IR, which is not a
+    // capture slot but is one more thing in the signal path and was invisible
+    // anywhere else.
+    constexpr int kNumCards = static_cast<int>(kNumSlots) + 1;
+
     const auto slotRowArea = stage.GetFromTop(slotCardHeight);
-    auto slotArea = [&](size_t slot) {
-      return slotRowArea.GetGridCell(0, static_cast<int>(slot), 1, static_cast<int>(kNumSlots)).GetPadded(-6.f);
+    auto slotArea = [&](int card) {
+      return slotRowArea.GetGridCell(0, card, 1, kNumCards).GetPadded(-5.f);
     };
 
     const auto knobsArea = stage.GetReducedFromTop(slotCardHeight + 14.f).GetFromTop(NAM_KNOB_HEIGHT);
@@ -223,20 +251,36 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Below the knob *and* its value text. Placing it at NAM_KNOB_HEIGHT put
     // the switches on top of the readouts, which is why the captions were
     // sliced in half by the browser panel's top edge.
-    const auto toggleRow = stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(switchHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
+    // NAMSwitchControl draws its caption inside its own bounds, so each toggle
+    // needs the whole block rather than just the switch: given only the switch
+    // height the caption lands on top of the switch and both become awkward to
+    // hit. Wider cells too -- these were 38px of usable target.
+    const auto toggleRow =
+      stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(toggleBlockHeight);
+    // GetMidHPadded(p) yields a rect 2*p wide -- it is a half-width, not an
+    // inset. Passing 16 gave these a 32px box, which is narrower than the word
+    // "Noise Gate" and clipped the caption at both ends.
+    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(62.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(62.f);
 
     // The IR toggle belongs in the toggle row with the others, not on the cab
     // card. Putting it on the card meant it drew over the card's own clear
     // button and covered the capture name, so the cab slot could not be read
     // or cleared once something was loaded.
-    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(38.f);
+    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidVPadded(13.f).GetMidHPadded(13.f);
     const auto irArea = irSwitchArea;
 
     // The BROWSER handle, centred under the rig where the panel will appear.
     const auto browserToggleArea = remaining.GetFromTop(30.f).GetMidHPadded(60.f);
     remaining = remaining.GetReducedFromTop(36.f);
+
+    // The status strip sits above the browser rather than below it, so the
+    // catalogue is the last thing in the window and never separates the rig
+    // from its readouts -- and so collapsing the window past the browser
+    // leaves everything else intact.
+    const auto statusBarArea = remaining.GetFromTop(38.f);
+
+    mCollapsedHeight = static_cast<int>(statusBarArea.B + 14.f);
 
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
@@ -283,7 +327,17 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Drawn rather than photographed, so it stays sharp at any editor scale and
     // the palette lives in one place.
     pGraphics->AttachControl(new nr::theme::ChassisControl(b));
-    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
+
+    // Decorative only. It covers the whole window, so leaving it interactive
+    // put it on top of anything attached before it and swallowed those clicks
+    // -- which is exactly what stopped the header drag from working.
+    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap))->SetIgnoreMouse(true);
+
+    // Stands in for the caption bar the borderless window no longer has.
+    // Attached after the backdrop so it is above it, but before the header's
+    // own controls so those take their clicks first and only bare header space
+    // starts a drag.
+    pGraphics->AttachControl(new nr::shell::WindowDragControl(headerArea));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
@@ -306,14 +360,15 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // One card per stage. Clicking anywhere on a card opens the browser
     // already filtered to what can go in it, so choosing a pedal never means
     // scrolling past amps first.
-    static constexpr nr::rig::SlotKind kSlotKinds[kNumSlots] = {
-      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab};
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {
+      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab, nr::rig::SlotKind::IR};
 
-    for (size_t slot = 0; slot < kNumSlots; slot++)
+    for (int card = 0; card < kNumCards; card++)
     {
-      const auto kind = kSlotKinds[slot];
+      const auto kind = kSlotKinds[card];
+      const bool isIR = kind == nr::rig::SlotKind::IR;
 
-      auto browseForSlot = [this, pGraphics, kind](int slotIndex) {
+      auto browseForSlot = [this, pGraphics, kind, isIR](int slotIndex) {
         mBrowserTargetSlot = slotIndex;
 
         auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
@@ -323,18 +378,34 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
         panel->Hide(false);
 
-        const auto gears = nr::rig::SlotGears(kind);
+        if (!mBrowserOpen)
+        {
+          mBrowserOpen = true;
+          mPendingResizeHeight = PLUG_HEIGHT;
+        }
+
         std::string joined;
 
-        for (const auto& gear : gears)
+        for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
-        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind));
+        // An IR is a format rather than a gear, so it filters on format with
+        // the gear left open. Nothing else pins a format: cab captures on
+        // TONE3000 are overwhelmingly impulse responses, so pinning format=nam
+        // on the cab card cut it down to almost nothing. Leaving it open is
+        // safe now that the IR card exists to ask for IRs specifically, and a
+        // .wav picked from the cab card still loads -- the file's extension
+        // decides where it goes, not the card it came from.
+        const char* format = isIR ? "ir" : "";
+
+        static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
       };
 
-      auto clearSlot = [this](int slotIndex) {
-        SendArbitraryMsgFromUI(kMsgTagClearModel, ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0, nullptr);
+      auto clearSlot = [this, isIR](int slotIndex) {
+        SendArbitraryMsgFromUI(isIR ? kMsgTagClearIR : kMsgTagClearModel,
+                               isIR ? kCtrlTagIRFileBrowser : ModelBrowserCtrlTag(static_cast<size_t>(slotIndex)), 0,
+                               nullptr);
       };
 
       auto dropOnSlot = [this](int slotIndex, const char* path) {
@@ -342,27 +413,27 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         std::transform(extension.begin(), extension.end(), extension.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        if (extension == ".nam")
+        // The file decides where it goes, not the card it landed on: a .wav is
+        // an impulse response wherever you drop it.
+        if (extension == ".wav")
         {
-          // Same route the browser's downloads take, so a dropped capture and a
-          // downloaded one are staged identically.
-          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-          mPendingLoads.emplace_back(slotIndex, std::string(path));
-        }
-        else if (extension == ".wav")
-        {
-          // An impulse response is the cabinet, not a slot capture, so it goes
-          // to the IR loader whichever card it was dropped on.
           WDL_String irPath;
           irPath.Set(path);
           _LoadIRWithFeedback(irPath);
         }
+        else if (extension == ".nam" && slotIndex < static_cast<int>(kNumSlots))
+        {
+          std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+          mPendingLoads.emplace_back(slotIndex, std::string(path));
+        }
       };
 
-      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(slot), static_cast<int>(slot), kind,
-                                                           SlotActiveParam(slot), browseForSlot, clearSlot,
-                                                           dropOnSlot),
-                               ModelBrowserCtrlTag(slot));
+      const int activeParam = isIR ? kIRToggle : SlotActiveParam(static_cast<size_t>(card));
+      const int tag = isIR ? kCtrlTagIRFileBrowser : ModelBrowserCtrlTag(static_cast<size_t>(card));
+
+      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(card), card, kind, activeParam, browseForSlot,
+                                                          clearSlot, dropOnSlot),
+                               tag);
     }
 
     auto hideSlimOverlay = [](IControl* pCaller) {
@@ -445,7 +516,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       // window. A fixed 58% overlapped the bottom of the rig, hiding the cab
       // slot and the knob row behind it; deriving the top from the layout means
       // the two can never collide however the sections above are tuned.
-      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, statusBarArea.T);
+      const auto browserPanelArea = IRECT(b.L, statusBarArea.B + 10.f, b.R, b.B);
 
       auto* browserPanel = new nr::browser::T3KBrowserPanel(
         browserPanelArea, mBrowser,
@@ -472,19 +543,35 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           });
         });
 
-      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(true);
+      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(!mBrowserOpen);
 
       // The handle that opens it without going through a slot.
       pGraphics->AttachControl(
-        new nr::rig::BrowserToggleControl(browserToggleArea, [pGraphics](bool open) {
-          if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-            panel->Hide(!open);
-
-          pGraphics->SetAllControlsDirty();
-        }),
+        new nr::rig::BrowserToggleControl(
+          browserToggleArea, mBrowserOpen,
+          [this, pGraphics](bool open) {
+            mBrowserOpen = open;
+            mPendingResizeHeight = open ? PLUG_HEIGHT : mCollapsedHeight;
+          }),
         kCtrlTagBrowserToggle);
 
       pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
+
+      // Replace the caption-bar buttons that went with the OS frame. Inert in
+      // plugin builds, where the host owns the window.
+      pGraphics->AttachControl(
+        new nr::shell::WindowButtonControl(minimiseButtonArea, nr::shell::WindowButton::Minimise));
+      pGraphics->AttachControl(new nr::shell::WindowButtonControl(closeButtonArea, nr::shell::WindowButton::Close));
+
+      pGraphics->AttachControl(new nr::shell::WindowMenuControl(fileMenuArea, "File", true));
+      pGraphics->AttachControl(new nr::shell::WindowMenuControl(optionsMenuArea, "Options", false));
+
+      // The browser starts closed, so the window should start collapsed.
+      // Requested rather than done here: the graphics context is still being
+      // built inside the layout function.
+      if (!mBrowserOpen)
+        mPendingResizeHeight = mCollapsedHeight;
+
 
       // Presets save the whole rig, so they go through the plugin's own
       // state serialization rather than a second format that would drift
@@ -690,6 +777,52 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
 
 void NeuralRig::OnIdle()
 {
+  // Once, after the window exists. Doing it during layout is too early -- the
+  // top-level window is not final yet.
+  if (!mNativeMenuRemoved)
+  {
+    mNativeMenuRemoved = true;
+    nr::shell::RemoveNativeMenu(GetUI());
+  }
+
+  // Grow or shrink the window with the browser. The layout is never re-run, so
+  // nothing is rebuilt and no control is freed underneath a handler; the
+  // browser simply falls outside a shorter window.
+  if (mPendingResizeHeight > 0)
+  {
+    const int height = mPendingResizeHeight;
+    mPendingResizeHeight = 0;
+
+    if (auto* pGraphics = GetUI())
+    {
+      // Visibility has to move with the window. The panel is attached hidden,
+      // and when the toggle stopped un-hiding it directly -- it only requests a
+      // height now -- nothing else did, so the window grew to reveal a control
+      // that was still hidden.
+      if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        panel->Hide(!mBrowserOpen);
+
+      pGraphics->Resize(PLUG_WIDTH, height, pGraphics->GetDrawScale());
+      pGraphics->SetAllControlsDirty();
+
+      // Only the first time. Re-centring on every browser toggle would make
+      // the window jump around under the pointer.
+      if (!mWindowCentred)
+      {
+        mWindowCentred = true;
+        nr::shell::CentreWindow(pGraphics);
+      }
+      else
+      {
+        // Opening the browser grows the window downwards from wherever it sits,
+        // so make sure the part that just appeared is actually on screen.
+        nr::shell::KeepOnScreen(pGraphics);
+      }
+    }
+
+    return;
+  }
+
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -731,10 +864,10 @@ void NeuralRig::OnIdle()
       // just changed.
       if (auto* pGraphics = GetUI())
       {
-        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        if (mBrowserOpen)
         {
-          panel->Hide(true);
-          pGraphics->SetAllControlsDirty();
+          mBrowserOpen = false;
+          mPendingResizeHeight = mCollapsedHeight;
         }
       }
     }
@@ -768,6 +901,23 @@ void NeuralRig::OnIdle()
         }
 
         static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+      }
+    }
+
+    // The IR card, same idea. Tracked separately because the IR is not a
+    // capture slot and does not live in mNAMPaths.
+    {
+      const bool occupied = mIRPath.GetLength() > 0;
+
+      if (occupied != mIROccupancy)
+      {
+        mIROccupancy = occupied;
+
+        if (auto* card = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
+        {
+          const std::string name = occupied ? std::filesystem::path(mIRPath.Get()).stem().string() : std::string{};
+          static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+        }
       }
     }
   }

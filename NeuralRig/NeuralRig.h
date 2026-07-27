@@ -246,6 +246,7 @@ public:
   void OnReset() override;
   void OnIdle() override;
 
+
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void OnUIOpen() override;
@@ -425,6 +426,32 @@ private:
   // Which slot the browser is filling. Set by the slot's globe button, read
   // when a card is clicked, so one panel serves every slot.
   int mBrowserTargetSlot = 0;
+
+  /// Whether the IR card currently shows a file, so its name is only pushed
+  /// when it actually changes rather than every idle tick.
+  bool mIROccupancy = false;
+
+  /// Whether the browser is open. Held here rather than in the control because
+  /// resizing re-runs the layout function, which rebuilds every control.
+  bool mBrowserOpen = false;
+
+  /// Window height with the browser closed: the bottom of the status strip,
+  /// measured by the layout rather than guessed. The browser is the last thing
+  /// in the window, so collapsing is simply cutting the window off here.
+  int mCollapsedHeight = PLUG_HEIGHT;
+
+  /// Height the window should become, applied from OnIdle. Resizing from a
+  /// control's own handler can tear down state that handler is still using,
+  /// which is how this crashed the first time it was tried.
+  int mPendingResizeHeight = 0;
+
+  /// The native menu bar is detached once, from the first idle tick.
+  bool mNativeMenuRemoved = false;
+
+  /// The window is centred once, after the startup collapse.
+  bool mWindowCentred = false;
+
+
 
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the

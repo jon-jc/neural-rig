@@ -63,9 +63,20 @@ BEGIN
     COMBOBOX        IDC_COMBO_MIDI_OUT_CHAN,125,250,50,200,CBS_DROPDOWNLIST | CBS_HASSTRINGS
 END
 
+// Borderless. No caption, no frame, no system menu: the plugin draws its own
+// title area and its own close button, so the OS chrome is redundant and its
+// grab edges would only invite a resize the layout cannot honour.
+// No CAPTION line: declaring one puts WS_CAPTION back even when the style does
+// not ask for it, which is what kept the title bar after the frame was removed.
+//
+// No MENU either. The bar was the last strip of unthemed chrome sitting outside
+// the plugin's own surface; File and Options are drawn in the header now and
+// post the same command ids, so audio settings and About still work.
+//
+// WS_MINIMIZEBOX is kept even though no box is drawn: without it the window
+// refuses SC_MINIMIZE, and the header's minimise button would do nothing.
 IDD_DIALOG_MAIN DIALOG 0, 0, 500, 300
-STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "NeuralRig"
+STYLE DS_SETFONT | DS_CENTER | WS_POPUP | WS_MINIMIZEBOX
 MENU IDR_MENU1
 FONT 8, "MS Sans Serif"
 BEGIN
