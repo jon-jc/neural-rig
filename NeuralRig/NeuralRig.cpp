@@ -108,16 +108,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
   }
 
-  // Pedal FX. Off by default: a capture should sound like the capture until
-  // the user asks for something on top of it.
-  GetParam(kDriveActive)->InitBool("DriveActive", false);
-  GetParam(kDriveAmount)->InitDouble("Drive", 3.0, 0.0, 10.0, 0.01);
-  GetParam(kDelayActive)->InitBool("DelayActive", false);
-  GetParam(kDelayTime)->InitDouble("Time", 350.0, 20.0, 1500.0, 1.0, "ms");
-  GetParam(kDelayMix)->InitDouble("Mix", 25.0, 0.0, 100.0, 0.1, "%");
-  GetParam(kReverbActive)->InitBool("ReverbActive", false);
-  GetParam(kReverbAmount)->InitDouble("Reverb", 25.0, 0.0, 100.0, 0.1, "%");
-
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -237,24 +227,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
 
-    // --- Pedal FX -----------------------------------------------------------
-    // Post-amp, like a wet effects loop: drive belongs in front of a capture
-    // and these do not, so they sit after the cabinet where a real rig puts
-    // time-based effects.
-    const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
-    const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
-    const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
-    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight);
-
-    const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
-    const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
-    const auto delayMixKnobArea = fxKnobRow.GetGridCell(0, 2, 1, 4).GetMidHPadded(48.f);
-    const auto reverbKnobArea = fxKnobRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(48.f);
-
-    const auto driveToggleArea = fxToggleRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(40.f);
-    const auto delayToggleArea = fxToggleRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(40.f);
-    const auto reverbToggleArea = fxToggleRow.GetGridCell(0, 3, 1, 4).GetMidHPadded(40.f);
-
     // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
     const auto modelArea = slotArea(0);
     const auto slimIconArea =
@@ -325,26 +297,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     pGraphics->AttachControl(new nr::theme::SectionPanelControl(ampGroup, "AMP"));
     pGraphics->AttachControl(new nr::theme::SectionPanelControl(chainGroup, "CAPTURE CHAIN"));
     pGraphics->AttachControl(new nr::theme::SectionPanelControl(cabinetGroup, "CABINET"));
-    pGraphics->AttachControl(new nr::theme::SectionPanelControl(fxGroup, "PEDAL FX"));
 
     // The connector threading the capture slots together. Without it the rows
     // read as four unrelated file pickers rather than a signal path.
     pGraphics->AttachControl(
       new nr::theme::ChainFlowControl(chainRows.GetFromLeft(34.f), static_cast<int>(kNumSlots), slotPitch),
       kCtrlTagChainFlow);
-
-    // Pedal FX
-    pGraphics->AttachControl(new NAMKnobControl(driveKnobArea, kDriveAmount, "Drive", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(delayKnobArea, kDelayTime, "Delay", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(delayMixKnobArea, kDelayMix, "Delay Mix", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(reverbKnobArea, kReverbAmount, "Reverb", style, knobBackgroundBitmap));
-
-    pGraphics->AttachControl(
-      new NAMSwitchControl(driveToggleArea, kDriveActive, "Drive", style, switchHandleBitmap));
-    pGraphics->AttachControl(
-      new NAMSwitchControl(delayToggleArea, kDelayActive, "Delay", style, switchHandleBitmap));
-    pGraphics->AttachControl(
-      new NAMSwitchControl(reverbToggleArea, kReverbActive, "Reverb", style, switchHandleBitmap));
 
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
@@ -580,31 +538,6 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
   sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
-
-  // Pedal FX, after the cabinet and the DC blocker. Order within the loop is
-  // drive into delay into reverb, which is how the pedals would be cabled.
-  {
-    auto* wet = hpfPointers[0];
-
-    if (GetParam(kDriveActive)->Bool())
-    {
-      mDrive.SetAmount(GetParam(kDriveAmount)->Value());
-      mDrive.Process(wet, nFrames);
-    }
-
-    if (GetParam(kDelayActive)->Bool())
-    {
-      mDelay.SetTimeMs(GetParam(kDelayTime)->Value());
-      mDelay.SetMix(GetParam(kDelayMix)->Value() * 0.01);
-      mDelay.Process(wet, nFrames);
-    }
-
-    if (GetParam(kReverbActive)->Bool())
-    {
-      mReverb.SetMix(GetParam(kReverbAmount)->Value() * 0.01);
-      mReverb.Process(wet, nFrames);
-    }
-  }
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state
@@ -632,11 +565,6 @@ void NeuralRig::OnReset()
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
 
-  // FX buffers are sized here, off the audio thread, so processing never
-  // allocates. 1500 ms matches the delay parameter's maximum.
-  mDelay.Prepare(sampleRate, 1500.0);
-  mReverb.Prepare(sampleRate);
-  mReverb.Reset();
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
