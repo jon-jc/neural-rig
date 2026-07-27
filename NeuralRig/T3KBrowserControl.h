@@ -65,6 +65,12 @@ public:
     g.FillRect(PluginColors::NAM_2, frame.GetFromTop(kTitleBarHeight));
     g.DrawRoundRect(PluginColors::NAM_THEMECOLOR, frame, 8.f, nullptr, 1.5f);
 
+    // While the view is parked mid-gesture the panel is empty, so say what is
+    // going on rather than showing a blank hole.
+    if (mDraggingFrame || mResizing)
+      g.DrawText(IText(15.f, PluginColors::HELP_TEXT), mResizing ? "Resizing..." : "Moving...",
+                 ContentRect());
+
     IContainerBase::Draw(g);
 
     // Resize grip: three diagonal ticks in the bottom-right, the usual idiom.
@@ -83,12 +89,25 @@ public:
   {
     mDraggingFrame = GetRECT().GetFromTop(kTitleBarHeight).Contains(x, y);
     mResizing = GripRect().Contains(x, y);
+
+    // Park the native view for the duration of the gesture. Repositioning it
+    // every drag frame leaves smears: the OS window repaints on its own
+    // schedule, out of step with the IGraphics surface underneath, so the two
+    // disagree about where it is for a frame at a time. Dragging an empty frame
+    // and putting the view back on release avoids the whole problem.
+    if (mDraggingFrame || mResizing)
+      PlaceWebView(true);
   }
 
   void OnMouseUp(float x, float y, const IMouseMod& mod) override
   {
+    const bool wasGesturing = mDraggingFrame || mResizing;
+
     mDraggingFrame = false;
     mResizing = false;
+
+    if (wasGesturing)
+      PlaceWebView();
   }
 
   void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
@@ -225,11 +244,12 @@ private:
 
   IRECT GripRect() const { return GetRECT().GetFromBRHC(kGripSize, kGripSize); }
 
+  /// Moves the frame and its chrome. The native view deliberately stays parked
+  /// until the gesture ends; see OnMouseDown.
   void Relayout(const IRECT& frame)
   {
     SetTargetAndDrawRECTs(frame);
     BuildChrome();
-    PlaceWebView();
     GetUI()->SetAllControlsDirty();
   }
 
@@ -281,13 +301,15 @@ private:
   /// handed, but UpdateWebViewBounds pre-multiplies as well -- and it uses
   /// GetDrawScale() rather than GetTotalScale(), which is what carries the OS
   /// display scaling. The result lands at 1/scale of where it belongs.
-  void PlaceWebView()
+  /// @param park  collapse the view to nothing without closing the panel, used
+  ///              while the frame is being dragged or resized
+  void PlaceWebView(bool park = false)
   {
     if (mWebView == nullptr || GetUI() == nullptr)
       return;
 
     const auto scale = GetUI()->GetTotalScale();
-    const auto bounds = mHide ? IRECT(0.f, 0.f, 0.f, 0.f) : ContentRect();
+    const auto bounds = (mHide || park) ? IRECT(0.f, 0.f, 0.f, 0.f) : ContentRect();
 
     mWebView->SetTargetAndDrawRECTs(bounds);
     mWebView->SetWebViewBounds(bounds.L, bounds.T, bounds.W(), bounds.H(), scale);

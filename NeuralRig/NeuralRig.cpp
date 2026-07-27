@@ -198,10 +198,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetMidHPadded(52.f);
     const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
 
-    // Toggles sit under the knob they belong to, with room to breathe.
-    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight).GetFromTop(switchHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(40.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(40.f);
+    // Toggles sit under the knob they belong to. The control draws its own
+    // caption inside its bounds, so it needs the whole block -- handing it only
+    // the switch height is what made the label collide with the switch and both
+    // awkward to hit.
+    const auto toggleRow = ampInner.GetFromBottom(toggleBlockHeight);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(44.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(44.f);
 
     // --- Capture chain ------------------------------------------------------
     const auto fileHeight = 32.0f;
@@ -236,7 +239,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto fxGroup = remaining.GetFromTop(knobBlockHeight + toggleBlockHeight + groupChrome);
     const auto fxInner = fxGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
     const auto fxKnobRow = fxInner.GetFromTop(NAM_KNOB_HEIGHT);
-    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight).GetFromTop(switchHeight);
+    const auto fxToggleRow = fxInner.GetFromBottom(toggleBlockHeight);
 
     const auto driveKnobArea = fxKnobRow.GetGridCell(0, 0, 1, 4).GetMidHPadded(48.f);
     const auto delayKnobArea = fxKnobRow.GetGridCell(0, 1, 1, 4).GetMidHPadded(48.f);
