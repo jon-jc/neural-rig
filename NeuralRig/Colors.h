@@ -1,84 +1,71 @@
 //
 //  Colors.h
-//  NeuralRig-macOS
+//  NeuralRig
 //
-//  Created by Steven Atkinson on 12/27/22.
+//  Originally from NeuralAmpModelerPlugin, Copyright (c) 2022 Steven Atkinson.
+//  Repalette for NeuralRig.
 //
-// Store the defined colors for the plugin in one place
+// One place for the plugin's colours.
 
 #ifndef Colors_h
 #define Colors_h
 
 #include "IGraphicsStructs.h"
 
+/**
+    NeuralRig's palette: warm amber on near-black.
+
+    Amber rather than blue because the thing being modelled glows. Valve light
+    is around 2000K, so the accent sits in the orange end and every highlight
+    in the UI is a tint of it -- knob arcs, meter caps, section rules, the
+    signal-flow connectors. Nothing is a second accent colour competing with it.
+
+    Greys are warm rather than neutral (a few points more red than blue). Next
+    to an amber accent, a truly neutral grey reads as faintly blue and fights
+    it; warming them slightly makes the whole panel feel lit rather than tinted.
+
+    The names NAM_1..NAM_3 are kept because upstream's controls reference them.
+*/
 namespace PluginColors
 {
 // HINT: ARGB
-// COLORS!
-const iplug::igraphics::IColor OFF_WHITE(255, 243, 246, 249); // Material UI because Heidi said so
 
-// From group photo
-// const iplug::igraphics::IColor NAM_5(255, 206, 194, 224);  // Languid
-// Lavendar const iplug::igraphics::IColor NAM_4(255, 30, 30, 39);  // Raisin
-// Black const iplug::igraphics::IColor NAM_3(255, 48, 43, 96);  // Space Cadet
-// const iplug::igraphics::IColor NAM_2(255, 3, 2, 1);  // Black
-// const iplug::igraphics::IColor NAM_1(255, 18, 15, 18);  // Smoky Black
+// --- Surfaces ---------------------------------------------------------------
+// Three steps, dark to light, so panels can sit above the background and
+// controls above panels without any borders being needed to separate them.
+const iplug::igraphics::IColor CHASSIS(255, 10, 10, 12); // deepest, behind everything
+const iplug::igraphics::IColor PANEL(255, 23, 24, 28); // raised section panels
+const iplug::igraphics::IColor PANEL_HI(255, 42, 44, 51); // 1px top edge: catches the light
+const iplug::igraphics::IColor WELL(255, 14, 14, 17); // recessed, for file rows and meters
 
-// Blue palette "Microsoft"
-// const iplug::igraphics::IColor NAM_1(255, 13, 27, 42);  // Black Fogra 29
-// const iplug::igraphics::IColor NAM_2(255, 27, 38, 59);  // Oxford Blue
-// const iplug::igraphics::IColor NAM_3(255, 65, 90, 119);  // Bedazzled Blue
-// const iplug::igraphics::IColor NAM_4(255, 119, 141, 169);  // Shadow Blue
-// const iplug::igraphics::IColor NAM_5(224, 225, 221, 224);  // Platinum
+// --- Accent -----------------------------------------------------------------
+const iplug::igraphics::IColor AMBER(255, 255, 163, 64); // valve glow
+const iplug::igraphics::IColor AMBER_DIM(255, 138, 88, 36); // unlit state of the same
+const iplug::igraphics::IColor AMBER_GLOW(90, 255, 163, 64); // halo, used at low opacity
 
-// Dark theme
-// const iplug::igraphics::IColor NAM_1(255, 26, 20, 35);  // Xiketic
-// const iplug::igraphics::IColor NAM_2(255, 55, 37, 73);  // Dark Purple
-// const iplug::igraphics::IColor NAM_3(255, 119, 76, 96);  // Twilight Lavendar
-// const iplug::igraphics::IColor NAM_4(255, 183, 93, 105);  // Popstar
-// const iplug::igraphics::IColor NAM_5(224, 234, 205, 194);  // Unbleached Silk
+// --- Type -------------------------------------------------------------------
+const iplug::igraphics::IColor INK(255, 232, 228, 220); // warm off-white
+const iplug::igraphics::IColor INK_MUTED(255, 138, 133, 125); // captions, section labels
+const iplug::igraphics::IColor INK_DIM(255, 92, 89, 84); // placeholders, empty slots
 
-// const iplug::igraphics::IColor MOUSEOVER = NAM_5.WithOpacity(0.3);
+// --- Meters -----------------------------------------------------------------
+const iplug::igraphics::IColor METER_OK(255, 118, 184, 108);
+const iplug::igraphics::IColor METER_HOT(255, 255, 163, 64);
+const iplug::igraphics::IColor METER_CLIP(255, 224, 76, 62);
 
-// My 3 colors (purple)
-// const iplug::igraphics::IColor NAM_1(255, 18, 17, 19);  // Smoky Black
-// const iplug::igraphics::IColor NAM_2(255, 115, 93, 120);  // Old Lavendar
-// const iplug::igraphics::IColor NAM_3(255, 189, 185, 196);  // Lavendar Gray
-// Alts
-// const iplug::igraphics::IColor NAM_2(255, 34, 39, 37);  // Charleston Green
-// const iplug::igraphics::IColor NAM_2(255, 114, 161, 229);  // Little Boy Blue
-// const iplug::igraphics::IColor NAM_3(255, 247, 247, 242);  // Baby Powder
-// const iplug::igraphics::IColor NAM_3(255, 230, 220, 249);  // Pale Purple
-// Pantone const iplug::igraphics::IColor NAM_3(255, 218, 203, 246);  //
-// Lavender Blue
+// --- Names upstream's controls expect --------------------------------------
+const iplug::igraphics::IColor OFF_WHITE = INK;
+const iplug::igraphics::IColor NAM_0(0, 10, 10, 12); // transparent
+const iplug::igraphics::IColor NAM_1 = CHASSIS;
+const iplug::igraphics::IColor NAM_2 = AMBER;
+const iplug::igraphics::IColor NAM_3 = INK_MUTED;
+const iplug::igraphics::IColor NAM_THEMECOLOR = AMBER;
+const iplug::igraphics::IColor NAM_THEMEFONTCOLOR = INK;
 
-// Blue mode
-const iplug::igraphics::IColor NAM_1(255, 29, 26, 31); // Raisin Black
-const iplug::igraphics::IColor NAM_2(255, 80, 133, 232); // Azure
-const iplug::igraphics::IColor NAM_3(255, 162, 178, 191); // Cadet Blue Crayola
-// Alts
-// const iplug::igraphics::IColor NAM_1(255, 18, 17, 19);  // Smoky Black
-// const iplug::igraphics::IColor NAM_2(255, 126, 188, 230);  // Camel
-// const iplug::igraphics::IColor NAM_2(255, 152, 202, 235);  // Pale Cerulean
-// const iplug::igraphics::IColor NAM_2(255, 46, 116, 163);  // French Blue
-// const iplug::igraphics::IColor NAM_2(255, 80, 171, 232);  // Blue Jeans
-// const iplug::igraphics::IColor NAM_3(255, 189, 185, 196);  // Aero
-// const iplug::igraphics::IColor NAM_3(255, 221, 237, 248);  // Alice Blue
-// const iplug::igraphics::IColor NAM_3(255, 207, 220, 229);  // Beau Blue
-// const iplug::igraphics::IColor NAM_3(255, 187, 199, 208);  // Silver Sand
-
-// Evan Heritage theme colors
-const iplug::igraphics::IColor NAM_0(0, 18, 17, 19); // Transparent
-const iplug::igraphics::IColor NAM_THEMECOLOR(255, 80, 133, 232); // Azure
-// const iplug::igraphics::IColor NAM_THEMECOLOR(255, 23, 190, 187); // Custom :)
-const iplug::igraphics::IColor NAM_THEMEFONTCOLOR(255, 242, 242, 242); // Dark White
-
-// Misc
-// const iplug::igraphics::IColor MOUSEOVER = NAM_3.WithOpacity(0.3);
-const iplug::igraphics::IColor MOUSEOVER = NAM_THEMEFONTCOLOR.WithOpacity(0.1);
-const iplug::igraphics::IColor HELP_TEXT = iplug::igraphics::COLOR_WHITE;
-const iplug::igraphics::IColor HELP_TEXT_MO = iplug::igraphics::COLOR_WHITE.WithOpacity(0.9);
-const iplug::igraphics::IColor HELP_TEXT_CLICKED = iplug::igraphics::COLOR_WHITE.WithOpacity(0.8);
+const iplug::igraphics::IColor MOUSEOVER = AMBER.WithOpacity(0.14f);
+const iplug::igraphics::IColor HELP_TEXT = INK_MUTED;
+const iplug::igraphics::IColor HELP_TEXT_MO = INK;
+const iplug::igraphics::IColor HELP_TEXT_CLICKED = INK.WithOpacity(0.8f);
 
 }; // namespace PluginColors
 

@@ -17,6 +17,7 @@
 
 #include "NeuralRigControls.h"
 #include "T3KBrowserControl.h"
+#include "Theme.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -51,8 +52,12 @@ const IVStyle style =
           DEFAULT_SHADOW_OFFSET,
           DEFAULT_WIDGET_FRAC,
           DEFAULT_WIDGET_ANGLE};
-const IVStyle titleStyle =
-  DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
+// Michroma is wide and geometric; letting it run large with the amber accent
+// makes the wordmark carry the header on its own.
+const IVStyle titleStyle = DEFAULT_STYLE
+                             .WithValueText(IText(28, PluginColors::INK, "Michroma-Regular"))
+                             .WithDrawFrame(false)
+                             .WithDrawShadows(false);
 const IVStyle radioButtonStyle =
   style
     .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
@@ -292,10 +297,9 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       }
     };
 
-    // Drawn rather than photographed. Upstream's background is a fixed 600x400
-    // bitmap; at this width it would either distort or leave the layout boxed
-    // into a corner of the window.
-    pGraphics->AttachPanelBackground(PluginColors::NAM_1);
+    // Drawn rather than photographed, so it stays sharp at any editor scale and
+    // the palette lives in one place.
+    pGraphics->AttachControl(new nr::theme::ChassisControl(b));
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
@@ -315,14 +319,19 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       WDL_String url("https://www.tone3000.com/search?formats=ir");
       pCaller->GetUI()->OpenURL(url.Get());
     };
-    // Bordered, labelled sections so the signal path is legible at a glance.
-    const auto groupStyle = style.WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.35f))
-                              .WithLabelText(IText(13.f, EAlign::Near, PluginColors::HELP_TEXT));
+    // Raised, titled panels rather than wire-frame groups: a filled surface a
+    // step lighter than the chassis, a shadow under it and a lit top edge do
+    // far more to separate sections than a drawn border does.
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(ampGroup, "AMP"));
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(chainGroup, "CAPTURE CHAIN"));
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(cabinetGroup, "CABINET"));
+    pGraphics->AttachControl(new nr::theme::SectionPanelControl(fxGroup, "PEDAL FX"));
 
-    pGraphics->AttachControl(new IVGroupControl(ampGroup, "AMP", 8.f, groupStyle));
-    pGraphics->AttachControl(new IVGroupControl(chainGroup, "CAPTURE CHAIN", 8.f, groupStyle));
-    pGraphics->AttachControl(new IVGroupControl(cabinetGroup, "CABINET", 8.f, groupStyle));
-    pGraphics->AttachControl(new IVGroupControl(fxGroup, "PEDAL FX", 8.f, groupStyle));
+    // The connector threading the capture slots together. Without it the rows
+    // read as four unrelated file pickers rather than a signal path.
+    pGraphics->AttachControl(
+      new nr::theme::ChainFlowControl(chainRows.GetFromLeft(34.f), static_cast<int>(kNumSlots), slotPitch),
+      kCtrlTagChainFlow);
 
     // Pedal FX
     pGraphics->AttachControl(new NAMKnobControl(driveKnobArea, kDriveAmount, "Drive", style, knobBackgroundBitmap));
@@ -339,11 +348,8 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
-      // Slot number plus a downward arrow, so it reads as a chain rather than
-      // four unrelated file pickers.
-      const auto numberText = IText(13.f, EAlign::Center, PluginColors::NAM_THEMECOLOR);
-      const auto label = std::to_string(slot + 1) + (slot + 1 < kNumSlots ? "\n|" : "");
-      pGraphics->AttachControl(new ITextControl(slotNumberArea(slot), label.c_str(), numberText));
+      // Slot numbers are drawn by ChainFlowControl, on its connector, so they
+      // sit on the signal path rather than beside it.
 
       // The globe opens the in-plugin TONE3000 browser aimed at this slot, so
       // picking a capture fills the row the user clicked. Upstream sends the
@@ -670,6 +676,31 @@ void NeuralRig::OnIdle()
           page->As<T3KBrowserPageControl>()->OnCaptureLoaded(label.c_str());
         }
       }
+    }
+  }
+
+  // Light the chain connector for whichever slots hold a capture, so the
+  // signal path shows where audio actually flows.
+  if (auto* pGraphics = GetUI())
+  {
+    if (auto* flow = pGraphics->GetControlWithTag(kCtrlTagChainFlow))
+    {
+      std::vector<bool> occupied(kNumSlots, false);
+      bool changed = false;
+
+      for (size_t slot = 0; slot < kNumSlots; slot++)
+      {
+        occupied[slot] = mNAMPaths[slot].GetLength() > 0;
+
+        if (occupied[slot] != mFlowOccupancy[slot])
+        {
+          mFlowOccupancy[slot] = occupied[slot];
+          changed = true;
+        }
+      }
+
+      if (changed)
+        static_cast<nr::theme::ChainFlowControl*>(flow)->SetOccupancy(occupied);
     }
   }
 
