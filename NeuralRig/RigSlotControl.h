@@ -282,9 +282,13 @@ class BrowserToggleControl : public IControl
 public:
   using Toggle = std::function<void(bool open)>;
 
-  BrowserToggleControl(const IRECT& bounds, Toggle onToggle)
+  /// @param open  the state to start in. Opening the browser resizes the
+  ///              window, which re-runs the layout and rebuilds this control,
+  ///              so it cannot own the state it is showing.
+  BrowserToggleControl(const IRECT& bounds, bool open, Toggle onToggle)
   : IControl(bounds)
   , mOnToggle(std::move(onToggle))
+  , mOpen(open)
   {
   }
 

@@ -35,6 +35,20 @@ constexpr size_t kNumSlots = 3;
 // never allocates. Resampling latency is a few hundred samples at most.
 constexpr size_t kBypassDelayCapacity = 8192;
 
+/// Window height with the browser closed: header, rig, the BROWSER handle and
+/// the status strip, and nothing else. Opening the browser grows the window to
+/// PLUG_HEIGHT rather than overlaying the rig, so the catalogue never covers
+/// the thing you are loading into.
+///
+/// Derived from the layout's own terms -- 14 padding, 54 header, 410 rig, 10
+/// gap, 36 handle, 38 status, 14 padding -- with a little slack. This is the
+/// plugin's default size, so it is PLUG_HEIGHT.
+constexpr int kCollapsedHeight = PLUG_HEIGHT;
+
+/// Height with the browser open. Tall enough to show a useful number of cards
+/// without exceeding a 1080p screen once window chrome is accounted for.
+constexpr int kExpandedHeight = 980;
+
 class NAMSender : public iplug::IPeakAvgSender<>
 {
 public:
@@ -429,6 +443,10 @@ private:
   /// Whether the IR card currently shows a file, so its name is only pushed
   /// when it actually changes rather than every idle tick.
   bool mIROccupancy = false;
+
+  /// Whether the browser is open. Held here rather than in the control because
+  /// resizing re-runs the layout function, which rebuilds every control.
+  bool mBrowserOpen = false;
 
   // Captures the browser has downloaded, waiting to be staged. The download
   // callback fires on a worker thread, and staging a model touches state the

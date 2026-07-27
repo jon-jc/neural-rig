@@ -126,6 +126,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
   mLayoutFunc = [&](IGraphics* pGraphics) {
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
+
+    // Resizing has to rebuild the layout, not just scale it: the browser
+    // changes the window's height, and the sections above it must take the
+    // space back when it closes.
+    pGraphics->SetLayoutOnResize(true);
     pGraphics->AttachTextEntryControl();
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
@@ -234,14 +239,17 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // hit. Wider cells too -- these were 38px of usable target.
     const auto toggleRow =
       stage.GetReducedFromTop(slotCardHeight + 14.f + knobBlockHeight).GetFromTop(toggleBlockHeight);
-    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(16.f);
-    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(16.f);
+    // GetMidHPadded(p) yields a rect 2*p wide -- it is a half-width, not an
+    // inset. Passing 16 gave these a 32px box, which is narrower than the word
+    // "Noise Gate" and clipped the caption at both ends.
+    const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(62.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(62.f);
 
     // The IR toggle belongs in the toggle row with the others, not on the cab
     // card. Putting it on the card meant it drew over the card's own clear
     // button and covered the capture name, so the cab slot could not be read
     // or cleared once something was loaded.
-    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidVPadded(4.f).GetMidHPadded(30.f);
+    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidVPadded(13.f).GetMidHPadded(13.f);
     const auto irArea = irSwitchArea;
 
     // The BROWSER handle, centred under the rig where the panel will appear.
@@ -334,16 +342,29 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
         panel->Hide(false);
 
+        if (!mBrowserOpen)
+        {
+          mBrowserOpen = true;
+          pGraphics->Resize(PLUG_WIDTH, kExpandedHeight, pGraphics->GetDrawScale(), true);
+          panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser);
+
+          if (panel == nullptr)
+            return;
+        }
+
         std::string joined;
 
         for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
         // An IR is a format rather than a gear, so it filters on format with
-        // the gear left open. The cab slot pins format=nam for the opposite
-        // reason: gear=cab alone returns mostly impulse responses, which is
-        // what made picking a cab capture feel like the filter was wrong.
-        const char* format = isIR ? "ir" : (kind == nr::rig::SlotKind::Cab ? "nam" : "");
+        // the gear left open. Nothing else pins a format: cab captures on
+        // TONE3000 are overwhelmingly impulse responses, so pinning format=nam
+        // on the cab card cut it down to almost nothing. Leaving it open is
+        // safe now that the IR card exists to ask for IRs specifically, and a
+        // .wav picked from the cab card still loads -- the file's extension
+        // decides where it goes, not the card it came from.
+        const char* format = isIR ? "ir" : "";
 
         static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
@@ -490,16 +511,20 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           });
         });
 
-      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(true);
+      pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(!mBrowserOpen);
 
       // The handle that opens it without going through a slot.
       pGraphics->AttachControl(
-        new nr::rig::BrowserToggleControl(browserToggleArea, [pGraphics](bool open) {
-          if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
-            panel->Hide(!open);
+        new nr::rig::BrowserToggleControl(
+          browserToggleArea, mBrowserOpen,
+          [this, pGraphics](bool open) {
+            mBrowserOpen = open;
 
-          pGraphics->SetAllControlsDirty();
-        }),
+            // Grow the window instead of overlaying: the catalogue covering the
+            // slot you are loading into was the original complaint about the
+            // old web view, and overlaying reproduces it.
+            pGraphics->Resize(PLUG_WIDTH, open ? kExpandedHeight : kCollapsedHeight, pGraphics->GetDrawScale(), true);
+          }),
         kCtrlTagBrowserToggle);
 
       pGraphics->AttachControl(new nr::shell::StatusBarControl(statusBarArea), kCtrlTagStatusBar);
@@ -749,10 +774,10 @@ void NeuralRig::OnIdle()
       // just changed.
       if (auto* pGraphics = GetUI())
       {
-        if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
+        if (mBrowserOpen)
         {
-          panel->Hide(true);
-          pGraphics->SetAllControlsDirty();
+          mBrowserOpen = false;
+          pGraphics->Resize(PLUG_WIDTH, kCollapsedHeight, pGraphics->GetDrawScale(), true);
         }
       }
     }
