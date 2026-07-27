@@ -30,12 +30,11 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-#define PLUG_WIDTH 600
-// Upstream is 600x400 and so is its background artwork. The capture chain and
-// cabinet sections are drawn below that, on their own panels, so the artwork is
-// only ever used at the size it was made for.
-#define PLUG_HEIGHT 660
-#define NR_AMP_SECTION_HEIGHT 400.f
+// Wide, like an amp sim rather than a utility panel. Upstream's 600x400
+// background photo is not used: it cannot stretch to this without distorting,
+// and the sections are drawn instead, which is what lets the layout breathe.
+#define PLUG_WIDTH 900
+#define PLUG_HEIGHT 680
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0

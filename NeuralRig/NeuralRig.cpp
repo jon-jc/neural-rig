@@ -147,77 +147,67 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     const auto b = pGraphics->GetBounds();
 
-    // The amp section keeps upstream's exact 600x400 geometry, because its
-    // background is a fixed-size photograph -- stretching it to a taller window
-    // is what made the earlier layout spill past the artwork. Everything new
-    // lives below it on drawn panels.
-    const auto ampSection = b.GetFromTop(NR_AMP_SECTION_HEIGHT);
-    const auto rackSection = b.GetReducedFromTop(NR_AMP_SECTION_HEIGHT);
+    // Every section is carved off a running remainder rather than positioned by
+    // hand, so nothing can overlap however the numbers are tuned. Reading top to
+    // bottom here is reading the signal path.
+    auto remaining = b.GetPadded(-16.f);
 
-    const auto mainArea = ampSection.GetPadded(-20);
-    const auto contentArea = mainArea.GetPadded(-10);
-    const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight);
+    const auto headerArea = remaining.GetFromTop(46.f);
+    remaining = remaining.GetReducedFromTop(46.f + 8.f);
 
-    // Areas for knobs
-    const auto knobsPad = 20.0f;
-    const auto knobsExtraSpaceBelowTitle = 25.0f;
-    const auto singleKnobPad = -2.0f;
-    const auto knobsArea = contentArea.GetFromTop(NAM_KNOB_HEIGHT)
-                             .GetReducedFromLeft(knobsPad)
-                             .GetReducedFromRight(knobsPad)
-                             .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
+    const auto titleArea = headerArea.GetFromLeft(320.f);
+    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetMidVPadded(17.f);
 
-    const auto ngToggleArea =
-      noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    // --- Amp: knobs across the full width, with meters bracketing them -------
+    const auto ampGroup = remaining.GetFromTop(250.f);
+    remaining = remaining.GetReducedFromTop(250.f + 10.f);
 
-    // Areas for model and IR
-    const auto fileWidth = 200.0f;
-    const auto fileHeight = 30.0f;
-    // The capture chain lives in its own panel below the amp, signal flowing
-    // top to bottom so the layout reads in the order the audio travels.
-    const auto rackPad = rackSection.GetPadded(-14.f);
-    const auto chainGroup = rackPad.GetFromTop(150.f);
-    const auto chainRows = chainGroup.GetPadded(-10.f).GetReducedFromTop(14.f);
+    const auto ampInner = ampGroup.GetPadded(-12.f).GetReducedFromTop(14.f);
+    const auto inputMeterArea = ampInner.GetFromLeft(22.f).GetMidVPadded(78.f);
+    const auto outputMeterArea = ampInner.GetFromRight(22.f).GetMidVPadded(78.f);
+
+    const auto knobsArea = ampInner.GetReducedFromLeft(44.f).GetReducedFromRight(44.f).GetFromTop(NAM_KNOB_HEIGHT);
+    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetMidHPadded(52.f);
+    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(52.f);
+    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetMidHPadded(52.f);
+    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(52.f);
+    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetMidHPadded(52.f);
+    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetMidHPadded(52.f);
+
+    // Toggles sit under the knob they belong to, with room to breathe.
+    const auto toggleRow = ampInner.GetFromBottom(46.f);
+    const auto ngToggleArea = toggleRow.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetMidHPadded(34.f);
+    const auto eqToggleArea = toggleRow.GetGridCell(0, kToneMid, 1, numKnobs).GetMidHPadded(34.f);
+
+    // --- Capture chain ------------------------------------------------------
+    const auto fileHeight = 32.0f;
+    const auto chainGroup = remaining.GetFromTop(216.f);
+    remaining = remaining.GetReducedFromTop(216.f + 10.f);
+
+    const auto chainRows = chainGroup.GetPadded(-12.f).GetReducedFromTop(16.f);
     const auto slotPitch = chainRows.H() / static_cast<float>(kNumSlots);
 
+    auto slotRow = [&](size_t slot) {
+      return chainRows.GetFromTop(slotPitch).GetVShifted(slotPitch * static_cast<float>(slot));
+    };
+    // Left gutter carries the slot number and the connector between stages.
+    auto slotNumberArea = [&](size_t slot) { return slotRow(slot).GetFromLeft(34.f); };
     auto slotArea = [&](size_t slot) {
-      return chainRows.GetFromTop(slotPitch)
-        .GetVShifted(slotPitch * static_cast<float>(slot))
-        .GetPadded(-2.f)
-        // Leave room on the left for the slot number and flow arrow.
-        .GetReducedFromLeft(30.f);
+      return slotRow(slot).GetReducedFromLeft(38.f).GetMidVPadded(fileHeight * 0.5f);
     };
 
-    auto slotNumberArea = [&](size_t slot) {
-      return chainRows.GetFromTop(slotPitch)
-        .GetVShifted(slotPitch * static_cast<float>(slot))
-        .GetFromLeft(28.f);
-    };
+    // --- Cabinet ------------------------------------------------------------
+    const auto cabinetGroup = remaining.GetFromTop(74.f);
+    remaining = remaining.GetReducedFromTop(74.f);
 
-    const auto cabinetGroup = rackPad.GetFromBottom(rackPad.H() - 158.f);
-    const auto irArea = cabinetGroup.GetPadded(-10.f).GetReducedFromTop(14.f).GetFromTop(fileHeight);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+    const auto irArea = cabinetGroup.GetPadded(-12.f).GetReducedFromTop(16.f).GetFromTop(fileHeight);
+    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-34.0f).GetScaledAboutCentre(0.6f);
 
-    // Kept in the amp section, next to where the single model used to sit.
-    const auto modelArea = contentArea.GetFromBottom(fileHeight).GetMidHPadded(fileWidth);
+    // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
+    const auto modelArea = slotArea(0);
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
-
-    // Areas for meters
-    const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
-    const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
-
-    // Misc Areas
-    const auto settingsButtonArea = CornerButtonArea(b);
+    const auto modelIconArea = titleArea.GetFromRight(30.f);
 
     // Model loader button
     auto makeLoadModelCompletionHandler = [&](size_t slot) {
@@ -255,10 +245,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       }
     };
 
-    // Fill the whole window first, then place the artwork at its native size in
-    // the amp section only.
+    // Drawn rather than photographed. Upstream's background is a fixed 600x400
+    // bitmap; at this width it would either distort or leave the layout boxed
+    // into a corner of the window.
     pGraphics->AttachPanelBackground(PluginColors::NAM_1);
-    pGraphics->AttachControl(new IBitmapControl(ampSection, backgroundBitmap))->SetIgnoreMouse(true);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
@@ -279,9 +269,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       pCaller->GetUI()->OpenURL(url.Get());
     };
     // Bordered, labelled sections so the signal path is legible at a glance.
-    const auto groupStyle = style.WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.4f))
-                              .WithLabelText(IText(14.f, EAlign::Near, PluginColors::HELP_TEXT));
+    const auto groupStyle = style.WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.35f))
+                              .WithLabelText(IText(13.f, EAlign::Near, PluginColors::HELP_TEXT));
 
+    pGraphics->AttachControl(new IVGroupControl(ampGroup, "AMP", 8.f, groupStyle));
     pGraphics->AttachControl(new IVGroupControl(chainGroup, "CAPTURE CHAIN", 8.f, groupStyle));
     pGraphics->AttachControl(new IVGroupControl(cabinetGroup, "CABINET", 8.f, groupStyle));
 
