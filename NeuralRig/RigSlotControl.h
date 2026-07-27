@@ -129,12 +129,12 @@ public:
     else
       g.DrawRoundRect(PluginColors::PANEL_HI, mRECT, 7.f);
 
-    const IText label(10.f, loaded ? accent : PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText label(12.f, loaded ? accent : PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
     g.DrawText(label, SlotLabel(mKind), mLabelRect);
 
     if (loaded)
     {
-      const IText title(15.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
+      const IText title(17.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
       g.DrawText(title, mCaptureName.c_str(), mTitleRect);
 
       DrawClear(g, accent);
@@ -142,10 +142,10 @@ public:
     }
     else
     {
-      const IText hint(12.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
+      const IText hint(14.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
       g.DrawText(hint, SlotPlaceholder(mKind), mTitleRect);
 
-      const IText sub(10.5f, PluginColors::INK_DIM, nullptr, EAlign::Near, EVAlign::Middle);
+      const IText sub(12.f, PluginColors::INK_DIM, nullptr, EAlign::Near, EVAlign::Middle);
       g.DrawText(sub, "Alternatively, drop a NAM or IR file here", mSubtitleRect);
     }
   }
@@ -200,11 +200,13 @@ private:
   {
     const auto inner = mRECT.GetPadded(-12.f);
 
-    mLabelRect = inner.GetFromTop(14.f);
-    mClearRect = mLabelRect.GetFromRight(16.f);
-    mTitleRect = inner.GetFromTop(46.f).GetReducedFromTop(18.f);
-    mSubtitleRect = inner.GetFromTop(64.f).GetReducedFromTop(46.f);
-    mPowerRect = inner.GetFromBottom(28.f).GetFromRight(28.f);
+    // Rows sized for the type they hold, with the clear button clear of the
+    // label rather than sharing its baseline.
+    mLabelRect = inner.GetFromTop(16.f);
+    mClearRect = mLabelRect.GetFromRight(18.f);
+    mTitleRect = inner.GetFromTop(52.f).GetReducedFromTop(22.f);
+    mSubtitleRect = inner.GetFromTop(74.f).GetReducedFromTop(52.f);
+    mPowerRect = inner.GetFromBottom(30.f).GetFromRight(30.f);
   }
 
   void DrawClear(IGraphics& g, const IColor& accent)
@@ -272,7 +274,7 @@ public:
   {
     const auto colour = mHovered ? PluginColors::AMBER : PluginColors::INK_MUTED;
 
-    const IText label(10.f, colour, nullptr, EAlign::Center, EVAlign::Top);
+    const IText label(12.f, colour, nullptr, EAlign::Center, EVAlign::Top);
     g.DrawText(label, "BROWSER", mRECT);
 
     // A chevron pointing the way the panel will move, so the control says what

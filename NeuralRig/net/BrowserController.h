@@ -191,6 +191,13 @@ private:
 
   std::atomic<bool> mDirty{false};
   std::atomic<bool> mBusy{false};
+
+  /// The most recent request that arrived while another was running. Only one
+  /// is kept: if the user clicks three filters quickly they want the third, and
+  /// running all three in turn would show them two sets of results they have
+  /// already moved past.
+  std::mutex mPendingMutex;
+  std::function<void()> mPendingWork;
 };
 
 /// Human-readable label for a status, for the UI's message line.

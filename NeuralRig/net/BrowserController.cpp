@@ -117,16 +117,35 @@ BrowserController::Snapshot BrowserController::GetSnapshot() const
 
 void BrowserController::RunAsync(std::function<void()> work)
 {
-  // One operation at a time. A second request while one is in flight is
-  // dropped rather than queued: pressing Search twice means you want the
-  // second result, and running both would race over the same state.
+  // One operation at a time, but the newest request wins rather than losing.
+  //
+  // This used to drop anything that arrived mid-flight, on the reasoning that
+  // pressing Search twice means you want the second result. That was backwards:
+  // dropping the second request means you keep the *first* result, so a browser
+  // driven by clicking filters showed the previous filter's results every time.
   bool expected = false;
   if (!mBusy.compare_exchange_strong(expected, true))
+  {
+    std::lock_guard<std::mutex> lock(mPendingMutex);
+    mPendingWork = std::move(work);
     return;
+  }
 
   std::thread([this, work = std::move(work)] {
     work();
     mBusy.store(false, std::memory_order_release);
+
+    // Pick up whatever arrived while we were busy. Releasing mBusy first means
+    // a request landing right now starts on its own thread instead; if it beat
+    // us to it, our re-submission simply becomes the next pending item.
+    std::function<void()> next;
+    {
+      std::lock_guard<std::mutex> lock(mPendingMutex);
+      next.swap(mPendingWork);
+    }
+
+    if (next)
+      RunAsync(std::move(next));
   }).detach();
 }
 
@@ -295,6 +314,14 @@ void BrowserController::Search(const std::string& text,
   {
     std::lock_guard<std::mutex> lock(mMutex);
     mLastQuery = query;
+
+    // Searching *is* the Browse tab, so own that here. Callers used to call
+    // ShowTab(Browse) first and then Search, but ShowTab routes Browse straight
+    // back into GoToPage -> Search using the previous query. That first search
+    // claimed mBusy and the caller's real one -- carrying the new filter -- was
+    // dropped, so the results always lagged one click behind: picking the amp
+    // slot showed whatever the pedal slot had just asked for.
+    mSnapshot.tab = Tab::Browse;
   }
 
   RunAsync([this, query] {

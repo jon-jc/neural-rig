@@ -198,7 +198,7 @@ public:
 
     if (mSearchRect.Contains(x, y))
     {
-      const IText entry(12.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
+      const IText entry(14.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
       GetUI()->CreateTextEntry(*this, entry, mSearchRect, mQuery.c_str(), kSearchValIdx);
       return;
     }
@@ -303,7 +303,7 @@ private:
   static constexpr int kSearchValIdx = 100;
   static constexpr int kGearValIdx = 101;
   static constexpr int kSortValIdx = 102;
-  static constexpr float kCardHeight = 54.f;
+  static constexpr float kCardHeight = 64.f;
   static constexpr float kScrollStep = 42.f;
 
   // --- Layout ---------------------------------------------------------------
@@ -366,10 +366,9 @@ private:
 
   void RunSearch(int page)
   {
-    // Filters only apply to the catalogue, so searching implicitly means the
-    // Browse tab. Leaving the user on Favourites while their query did nothing
-    // would read as the search being broken.
-    mController.ShowTab(nr::net::BrowserController::Tab::Browse);
+    // Search sets the Browse tab itself. Calling ShowTab first would route back
+    // into a search with the previous query, claim the one allowed in-flight
+    // operation, and get this one dropped.
     mController.Search(mQuery, mGear, mSort, 0, page);
     SetDirty(false);
   }
@@ -427,10 +426,10 @@ private:
 
   void DrawHeader(IGraphics& g)
   {
-    const IText wordmark(15.f, PluginColors::AMBER, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText wordmark(18.f, PluginColors::AMBER, nullptr, EAlign::Near, EVAlign::Middle);
     g.DrawText(wordmark, "TONE3000", mHeaderRect);
 
-    const IText caption(11.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText caption(13.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
 
     const bool signedOut = mSnapshot.status == nr::net::BrowserController::Status::SignedOut;
 
@@ -447,7 +446,7 @@ private:
     // Status line, right of centre so it does not collide with the wordmark.
     if (!mSnapshot.message.empty())
     {
-      const IText status(11.f, PluginColors::INK_DIM, nullptr, EAlign::Far, EVAlign::Middle);
+      const IText status(12.f, PluginColors::INK_DIM, nullptr, EAlign::Far, EVAlign::Middle);
       g.DrawText(status, mSnapshot.message.c_str(), mHeaderRect.GetReducedFromRight(104.f));
     }
 
@@ -478,7 +477,7 @@ private:
     g.DrawRoundRect(PluginColors::PANEL_HI, mSearchRect, 5.f);
 
     const bool empty = mQuery.empty();
-    const IText text(12.f, empty ? PluginColors::INK_DIM : PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText text(14.f, empty ? PluginColors::INK_DIM : PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
 
     g.DrawText(text, empty ? "Search tones, pedals and IRs" : mQuery.c_str(),
                mSearchRect.GetReducedFromLeft(12.f).GetReducedFromRight(12.f));
@@ -490,7 +489,7 @@ private:
 
     if (mSnapshot.rows.empty())
     {
-      const IText empty(12.f, PluginColors::INK_DIM, nullptr, EAlign::Center, EVAlign::Middle);
+      const IText empty(14.f, PluginColors::INK_DIM, nullptr, EAlign::Center, EVAlign::Middle);
       g.DrawText(empty,
                  mSnapshot.status == nr::net::BrowserController::Status::SignedOut
                    ? "Connect your TONE3000 account to browse captures"
@@ -529,15 +528,15 @@ private:
     // Badge.
     const auto badge = inner.GetFromTop(15.f).GetFromLeft(BadgeWidth(entry));
     g.FillRoundRect(accent.WithOpacity(0.18f), badge, 3.f);
-    const IText badgeText(9.f, accent, nullptr, EAlign::Center, EVAlign::Middle);
+    const IText badgeText(11.f, accent, nullptr, EAlign::Center, EVAlign::Middle);
     g.DrawText(badgeText, GearLabel(entry.gear, entry.format), badge);
 
     // Title, to the right of the badge.
-    const IText title(13.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText title(15.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
     g.DrawText(title, entry.title.c_str(), inner.GetFromTop(17.f).GetReducedFromLeft(badge.W() + 8.f));
 
     // Byline.
-    const IText meta(10.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText meta(12.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
     g.DrawText(meta, BylineFor(entry).c_str(), inner.GetFromBottom(14.f));
 
     DrawStar(g, StarRectFor(row), entry.favourited);
@@ -603,7 +602,7 @@ private:
 
   void DrawFooter(IGraphics& g)
   {
-    const IText meta(10.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
+    const IText meta(12.f, PluginColors::INK_MUTED, nullptr, EAlign::Near, EVAlign::Middle);
 
     if (mSnapshot.total > 0)
     {
@@ -633,7 +632,7 @@ private:
     else if (outlined)
       g.DrawRoundRect(PluginColors::PANEL_HI, rect, 4.f);
 
-    const IText text(11.f, colour, nullptr, EAlign::Center, EVAlign::Middle);
+    const IText text(13.f, colour, nullptr, EAlign::Center, EVAlign::Middle);
     g.DrawText(text, label, rect);
   }
 

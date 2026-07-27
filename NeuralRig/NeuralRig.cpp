@@ -183,7 +183,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // four file rows, then a cabinet row -- which read as a form to fill in.
     // A rig reads left to right: what the signal hits first is leftmost, and
     // the controls that shape all of it sit underneath in a single row.
-    const auto slotCardHeight = 132.f;
+    const auto slotCardHeight = 146.f;
     const auto rigGroupHeight = slotCardHeight + knobBlockHeight + groupChrome + 18.f;
     const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
     remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
@@ -217,9 +217,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     const auto ngToggleArea = toggleRow.GetGridCell(0, 0, 1, numKnobs).GetMidHPadded(38.f);
     const auto eqToggleArea = toggleRow.GetGridCell(0, 3, 1, numKnobs).GetMidHPadded(38.f);
 
-    // The IR toggle rides with the cab slot, which is what it switches.
-    const auto irArea = slotArea(kNumSlots - 1);
-    const auto irSwitchArea = irArea.GetFromTop(20.f).GetFromRight(52.f).GetReducedFromRight(24.f);
+    // The IR toggle belongs in the toggle row with the others, not on the cab
+    // card. Putting it on the card meant it drew over the card's own clear
+    // button and covered the capture name, so the cab slot could not be read
+    // or cleared once something was loaded.
+    const auto irSwitchArea = toggleRow.GetGridCell(0, 5, 1, numKnobs).GetMidHPadded(38.f);
+    const auto irArea = irSwitchArea;
 
     // The BROWSER handle, centred under the rig where the panel will appear.
     const auto browserToggleArea = remaining.GetFromTop(30.f).GetMidHPadded(60.f);
@@ -408,8 +411,14 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // everything else, so it can simply take the lower half when open and
     // give it back when closed.
     {
+      // Anchored under the BROWSER handle rather than to a fraction of the
+      // window. A fixed 58% overlapped the bottom of the rig, hiding the cab
+      // slot and the knob row behind it; deriving the top from the layout means
+      // the two can never collide however the sections above are tuned.
+      const auto browserPanelArea = IRECT(b.L, browserToggleArea.B + 8.f, b.R, b.B);
+
       auto* browserPanel = new nr::browser::T3KBrowserPanel(
-        b.GetFromBottom(b.H() * 0.58f), mBrowser,
+        browserPanelArea, mBrowser,
         [this](int rowIndex, const nr::net::BrowserController::Row& row) {
           const int slot = mBrowserTargetSlot;
 
