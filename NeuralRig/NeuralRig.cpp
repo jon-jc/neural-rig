@@ -112,6 +112,37 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     GetParam(SlotActiveParam(slot))->InitBool(name.c_str(), true);
   }
 
+  // Per-stage trim. Unity by default, so loading a capture sounds like the
+  // capture until the user asks for something else.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    const std::string name = "Slot" + std::to_string(slot + 1) + "Out";
+    GetParam(SlotOutParam(slot))->InitGain(name.c_str(), 0.0, -20.0, 20.0, 0.1);
+  }
+
+  GetParam(kIROut)->InitGain("IROut", 0.0, -20.0, 20.0, 0.1);
+
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    const std::string name = "Slot" + std::to_string(slot + 1) + "Drive";
+    GetParam(SlotDriveParam(slot))->InitGain(name.c_str(), 0.0, -12.0, 24.0, 0.1);
+  }
+
+  // Defaults sit outside the audible band so the cabinet is untouched until
+  // the user reaches for it.
+  GetParam(kIRLowCut)->InitFrequency("IRLowCut", 20.0, 20.0, 800.0);
+  GetParam(kIRHighCut)->InitFrequency("IRHighCut", 20000.0, 2000.0, 20000.0);
+
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    // Wide open by default, so a capture sounds like itself until asked.
+    const std::string tone = "Slot" + std::to_string(slot + 1) + "Tone";
+    GetParam(SlotToneParam(slot))->InitFrequency(tone.c_str(), 20000.0, 800.0, 20000.0);
+
+    const std::string mix = "Slot" + std::to_string(slot + 1) + "Mix";
+    GetParam(SlotMixParam(slot))->InitPercentage(mix.c_str(), 100.0);
+  }
+
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -213,7 +244,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // four file rows, then a cabinet row -- which read as a form to fill in.
     // A rig reads left to right: what the signal hits first is leftmost, and
     // the controls that shape all of it sit underneath in a single row.
-    const auto slotCardHeight = 146.f;
+    const auto slotCardHeight = 226.f;
     const auto rigGroupHeight = slotCardHeight + 14.f + knobBlockHeight + toggleBlockHeight + groupChrome + 12.f;
     const auto rigGroup = remaining.GetFromTop(rigGroupHeight);
     remaining = remaining.GetReducedFromTop(rigGroupHeight + 10.f);
@@ -282,10 +313,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
     mCollapsedHeight = static_cast<int>(statusBarArea.B + 14.f);
 
-    // Legacy anchors, kept so the slim-model overlay lands somewhere sensible.
-    const auto modelArea = slotArea(0);
-    const auto slimIconArea =
-      IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
     const auto modelIconArea = titleArea.GetFromRight(30.f);
 
     // Model loader button
@@ -360,8 +387,8 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // One card per stage. Clicking anywhere on a card opens the browser
     // already filtered to what can go in it, so choosing a pedal never means
     // scrolling past amps first.
-    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {
-      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab, nr::rig::SlotKind::IR};
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp,
+                                                                nr::rig::SlotKind::IR};
 
     for (int card = 0; card < kNumCards; card++)
     {
@@ -389,14 +416,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
-        // An IR is a format rather than a gear, so it filters on format with
-        // the gear left open. Nothing else pins a format: cab captures on
-        // TONE3000 are overwhelmingly impulse responses, so pinning format=nam
-        // on the cab card cut it down to almost nothing. Leaving it open is
-        // safe now that the IR card exists to ask for IRs specifically, and a
-        // .wav picked from the cab card still loads -- the file's extension
-        // decides where it goes, not the card it came from.
-        const char* format = isIR ? "ir" : "";
+        // A capture slot can only load a .nam, so it says so. The IR card is
+        // the mirror image: an impulse response is a format rather than a gear,
+        // so format=ir with the gear left open is the only way to ask for one.
+        const char* format = isIR ? "ir" : "nam";
 
         static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
@@ -431,33 +454,46 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
       const int activeParam = isIR ? kIRToggle : SlotActiveParam(static_cast<size_t>(card));
       const int tag = isIR ? kCtrlTagIRFileBrowser : ModelBrowserCtrlTag(static_cast<size_t>(card));
 
-      pGraphics->AttachControl(new nr::rig::RigSlotControl(slotArea(card), card, kind, activeParam, browseForSlot,
-                                                          clearSlot, dropOnSlot),
-                               tag);
+      auto* slotCard = new nr::rig::RigSlotControl(slotArea(card), card, kind, activeParam, browseForSlot, clearSlot,
+                                                  dropOnSlot);
+
+      pGraphics->AttachControl(slotCard, tag);
+
+      // Each stage's own controls, always on the card. Hiding them behind a
+      // click meant the one thing you reach for after loading a capture was
+      // invisible, and the hidden row overlapped the card's text besides.
+      //
+      // A pedal and an amp both want drive in and level out; a cabinet wants
+      // its two cuts and a level. Three per card either way.
+      struct SlotKnob
+      {
+        int param;
+        const char* label;
+      };
+
+      // Braced, and only two entries where a stage has two: the initialiser
+      // was written without braces and with a filler third element, which is
+      // not valid C++ and is how a stray NUL ended up in this file.
+      const size_t slotIx = static_cast<size_t>(card);
+
+      const SlotKnob knobs[] = {
+        isIR ? SlotKnob{kIRLowCut, "Low Cut"} : SlotKnob{SlotDriveParam(slotIx), "Drive"},
+        isIR ? SlotKnob{kIRHighCut, "High Cut"} : SlotKnob{SlotToneParam(slotIx), "Tone"},
+        isIR ? SlotKnob{kIROut, "Level"} : SlotKnob{SlotMixParam(slotIx), "Mix"},
+        isIR ? SlotKnob{kIROut, ""} : SlotKnob{SlotOutParam(slotIx), "Level"},
+      };
+
+      // Drive, Tone, Mix and Level on a capture stage; three cuts on a cabinet.
+      const int numKnobsHere = isIR ? 3 : 4;
+      const auto knobRow = slotArea(card).GetPadded(-8.f).GetFromBottom(122.f);
+
+      for (int k = 0; k < numKnobsHere; k++)
+      {
+        const auto cell = knobRow.GetGridCell(0, k, 1, numKnobsHere).GetMidHPadded(isIR ? 40.f : 34.f);
+        pGraphics->AttachControl(new NAMKnobControl(cell, knobs[k].param, knobs[k].label, style, knobBackgroundBitmap));
+      }
     }
 
-    auto hideSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(true);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(true);
-      ui->SetAllControlsDirty();
-    };
-    auto showSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(false);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(false);
-      ui->SetAllControlsDirty();
-    };
-
-    pGraphics
-      ->AttachControl(
-        new NAMSquareButtonControl(slimIconArea, DefaultClickActionFunc, slimIconSVG), kCtrlTagSlimmableIcon)
-      ->SetAnimationEndActionFunction(showSlimOverlay)
-      ->Hide(true);
 
     // The IR's on/off switch. There is deliberately no file-picker beside it:
     // NAMFileBrowserControl draws chrome at a fixed size whatever rect it is
@@ -597,12 +633,11 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         kCtrlTagPresetBar);
     }
 
-    const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
-    pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
-      ->Hide(true);
-    pGraphics
-      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Slim", style, knobBackgroundBitmap), kCtrlTagSlimKnob)
-      ->Hide(true);
+    // No slim-model overlay. It anchored its icon to the right of the first
+    // card, which put it on top of the next one, and it revealed a full-size
+    // "Slim" knob in the middle of the window whenever a slimmable capture
+    // loaded. The slim size is still applied when a model provides it; it just
+    // has no floating controls of its own.
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
@@ -674,7 +709,65 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
 
       if (GetParam(SlotActiveParam(slot))->Bool())
       {
+        // Drive goes in front of the capture, because that is where it belongs:
+        // a capture reacts to level the way the amp it was taken from did, so
+        // pushing it is what changes the character. Applied to the source in
+        // place -- by this point the source is either our own chain buffer or
+        // the gate's output, and nothing downstream reads it again.
+        const double mix = GetParam(SlotMixParam(slot))->Value() * 0.01;
+        const bool blending = mix < 0.999 && !mSlotDry[slot].empty();
+
+        // Take the dry *before* drive. A blend control should fade toward the
+        // untouched signal, not toward a louder copy of it.
+        if (blending)
+          for (size_t c = 0; c < numChannelsInternal; c++)
+            memcpy(mSlotDryPointers[slot][c], chainSource[c], numFrames * sizeof(sample));
+
+        const double drive = DBToAmp(GetParam(SlotDriveParam(slot))->Value());
+
+        if (drive != 1.0)
+          for (size_t c = 0; c < numChannelsInternal; c++)
+            for (int f = 0; f < numFrames; f++)
+              chainSource[c][f] *= drive;
+
         mModels[slot]->process(chainSource, chainDest, nFrames);
+
+        // Tone sits after the capture, which is where a pedal's tone control
+        // actually is -- after the clipping stage, shaping what came out of it.
+        const double toneHz = GetParam(SlotToneParam(slot))->Value();
+
+        if (toneHz < 19999.0)
+        {
+          recursive_linear_filter::LowPassParams toneParams(GetSampleRate(), toneHz);
+          mSlotTone[slot].SetParams(toneParams);
+          sample** toned = mSlotTone[slot].Process(chainDest, numChannelsInternal, numFrames);
+
+          if (toned != chainDest)
+            for (size_t c = 0; c < numChannelsInternal; c++)
+              memcpy(chainDest[c], toned[c], numFrames * sizeof(sample));
+        }
+
+        if (blending)
+        {
+          // Delay the dry by exactly this stage's latency before blending. The
+          // bypass line is free here -- it only runs when the stage is off, and
+          // this branch is the stage being on -- so the two share it.
+          _RunBypassDelay(slot, mSlotDryPointers[slot], numChannelsInternal, numFrames);
+
+          for (size_t c = 0; c < numChannelsInternal; c++)
+            for (int f = 0; f < numFrames; f++)
+              chainDest[c][f] = mix * chainDest[c][f] + (1.0 - mix) * mSlotDryPointers[slot][c][f];
+        }
+
+        // Trim this stage before it feeds the next. A gain is safe to apply
+        // here because it does not change the stage's latency, so the chain's
+        // reported latency is unaffected.
+        const double trim = DBToAmp(GetParam(SlotOutParam(slot))->Value());
+
+        if (trim != 1.0)
+          for (size_t c = 0; c < numChannelsInternal; c++)
+            for (int f = 0; f < numFrames; f++)
+              chainDest[c][f] *= trim;
       }
       else
       {
@@ -713,7 +806,28 @@ void NeuralRig::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, in
 
   sample** irPointers = toneStackOutPointers;
   if (mIR != nullptr && GetParam(kIRToggle)->Value())
+  {
     irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+
+    // Cabinet trim. Impulse responses arrive at wildly different levels, so
+    // matching one to the rest of the rig otherwise means riding the master.
+    const double trim = DBToAmp(GetParam(kIROut)->Value());
+
+    if (trim != 1.0)
+      for (size_t c = 0; c < numChannelsInternal; c++)
+        for (int f = 0; f < numFrames; f++)
+          irPointers[c][f] *= trim;
+
+    // Low and high cut, the two controls every cab sim has, because a raw IR
+    // is almost always too boomy at the bottom and too fizzy at the top.
+    recursive_linear_filter::HighPassParams lowCut(GetSampleRate(), GetParam(kIRLowCut)->Value());
+    recursive_linear_filter::LowPassParams highCut(GetSampleRate(), GetParam(kIRHighCut)->Value());
+    mIRLowCut.SetParams(lowCut);
+    mIRHighCut.SetParams(highCut);
+
+    irPointers = mIRLowCut.Process(irPointers, numChannelsInternal, numFrames);
+    irPointers = mIRHighCut.Process(irPointers, numChannelsInternal, numFrames);
+  }
 
   // And the HPF for DC offset (Issue 271)
   const double highPassCutoffFreq = kDCBlockerFrequency;
@@ -847,16 +961,30 @@ void NeuralRig::OnIdle()
       WDL_String filePath;
       filePath.Set(path.c_str());
 
-      // A downloaded impulse response is a .wav and belongs to the cabinet, not
-      // to a capture slot. Without this the browser's IR filter would download
-      // files that nothing ever loaded.
-      if (std::filesystem::path(path).extension() == ".wav")
+      std::string extension = std::filesystem::path(path).extension().string();
+      std::transform(extension.begin(), extension.end(), extension.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+      // A .wav is an impulse response and belongs to the cabinet. So does
+      // anything aimed at the IR card, which is card index kNumSlots and
+      // therefore not a capture slot at all -- staging into it would index
+      // past the end of the slot arrays.
+      const bool isIRTarget = slot >= static_cast<int>(kNumSlots);
+
+      if (extension == ".wav" || isIRTarget)
       {
         _LoadIRWithFeedback(filePath);
       }
-      else
+      else if (slot >= 0)
       {
-        _StageModel(static_cast<size_t>(slot), filePath);
+        // _StageModel returns why it failed, and that return value was being
+        // discarded -- so a capture that would not load did nothing at all, with
+        // no message anywhere. An invisible failure is indistinguishable from a
+        // broken download or a broken filter, which is exactly how it looked.
+        const std::string message = _StageModel(static_cast<size_t>(slot), filePath);
+
+        if (!message.empty())
+          _ShowMessageBox(GetUI(), message.c_str(), "Failed to load capture", kMB_OK);
       }
 
       // Close the browser once a capture lands: the user asked for one, they
@@ -900,7 +1028,7 @@ void NeuralRig::OnIdle()
           name = std::filesystem::path(mNAMPaths[slot].Get()).stem().string();
         }
 
-        static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+        static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureNameAndCollapse(name.c_str());
       }
     }
 
@@ -916,7 +1044,7 @@ void NeuralRig::OnIdle()
         if (auto* card = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
         {
           const std::string name = occupied ? std::filesystem::path(mIRPath.Get()).stem().string() : std::string{};
-          static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureName(name.c_str());
+          static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureNameAndCollapse(name.c_str());
         }
       }
     }
@@ -959,12 +1087,6 @@ void NeuralRig::OnIdle()
       // FIXME -- need to disable only the "normalized" model
       // pGraphics->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimKnob))
-        p->Hide(true);
       pGraphics->SetAllControlsDirty();
       mModelCleared = false;
     }
@@ -1355,7 +1477,16 @@ std::string NeuralRig::_StageModel(size_t slot, const WDL_String& modelPath)
     SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadedModel, mNAMPaths[slot].GetLength(),
                                mNAMPaths[slot].Get());
   }
-  catch (std::runtime_error& e)
+  // std::exception, not std::runtime_error.
+  //
+  // This caught runtime_error alone, and most of what this path throws is not
+  // one. nlohmann::json has its own hierarchy -- parse_error, type_error --
+  // and std::invalid_argument and std::out_of_range derive from logic_error.
+  // Any of those escaped uncaught, past OnIdle, leaving no message, no staged
+  // model and no failed-load notification: the capture simply did not appear.
+  // A2 configs are new enough to be exactly the kind of thing that trips a
+  // parse or range error rather than a runtime one.
+  catch (const std::exception& e)
   {
     SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadFailed);
 
@@ -1367,6 +1498,16 @@ std::string NeuralRig::_StageModel(size_t slot, const WDL_String& modelPath)
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
     return e.what();
+  }
+  catch (...)
+  {
+    // Something that is not a std::exception at all. Rare, but the alternative
+    // is unwinding out of the editor's idle callback and taking the host with
+    // us.
+    SendControlMsgFromDelegate(ModelBrowserCtrlTag(slot), kMsgTagLoadFailed);
+    mStagedModels[slot] = nullptr;
+    mNAMPaths[slot] = previousNAMPath;
+    return "That capture could not be read.";
   }
   return "";
 }
@@ -1464,6 +1605,18 @@ void NeuralRig::_PrepareBuffers(const size_t numChannels, const size_t numFrames
     // any host rate with room to spare.
     for (size_t slot = 0; slot < kNumSlots; slot++)
     {
+      // Sized to the same block this function is preparing for, so the blend
+      // never allocates on the audio thread.
+      const size_t drySize = static_cast<size_t>(numFrames) * kNumChannelsInternal;
+
+      if (mSlotDry[slot].size() != drySize)
+      {
+        mSlotDry[slot].assign(drySize, 0.0);
+
+        for (size_t c = 0; c < kNumChannelsInternal; c++)
+          mSlotDryPointers[slot][c] = mSlotDry[slot].data() + c * static_cast<size_t>(numFrames);
+      }
+
       if (mSlotBypassDelay[slot].size() != kBypassDelayCapacity)
       {
         mSlotBypassDelay[slot].assign(kBypassDelayCapacity, 0.0);
@@ -1608,11 +1761,6 @@ void NeuralRig::_UpdateControlsFromModel()
       c->SetCalibratedDisable(!mModel->HasOutputLevel());
     }
 
-    if (auto* pSlimIcon = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
-    {
-      const bool show = mModel->GetSlimmableModel() != nullptr;
-      pSlimIcon->Hide(!show);
-    }
   }
 }
 

@@ -86,6 +86,30 @@ struct GearFilter
   const char* format; ///< format value, empty for any
 };
 
+/// Architecture choices, with the API's default spelled out.
+///
+/// Omitting the architecture parameter is documented as "A1 + Custom (legacy
+/// default; excludes A2)". Every search this plugin made omitted it, so A2
+/// captures -- where most current TONE3000 content lives -- were invisible
+/// everywhere. That is why a cab search that the website answers with a full
+/// page came back nearly empty here.
+struct ArchitectureFilter
+{
+  const char* label;
+  int value; ///< 0 omits the parameter, which is the legacy A1 + Custom default
+};
+
+inline const std::vector<ArchitectureFilter>& ArchitectureFilters()
+{
+  static const std::vector<ArchitectureFilter> filters = {
+    {"A2 models", 2},
+    {"A1 + Custom", 0},
+    {"A1 only", 1},
+  };
+
+  return filters;
+}
+
 inline const std::vector<GearFilter>& GearFilters()
 {
   static const std::vector<GearFilter> filters = {
@@ -228,6 +252,12 @@ public:
       return;
     }
 
+    if (mArchRect.Contains(x, y))
+    {
+      ShowArchitectureMenu();
+      return;
+    }
+
     if (mSortRect.Contains(x, y))
     {
       ShowSortMenu();
@@ -331,6 +361,16 @@ public:
       mFormat = filter.format;
       mGearLabel = filter.label;
     }
+    else if (valIdx == kArchValIdx)
+    {
+      const auto& architectures = ArchitectureFilters();
+
+      if (chosen < 0 || chosen >= static_cast<int>(architectures.size()))
+        return;
+
+      mArchitecture = architectures[static_cast<size_t>(chosen)].value;
+      mArchLabel = architectures[static_cast<size_t>(chosen)].label;
+    }
     else if (valIdx == kSortValIdx)
     {
       const auto sorts = nr::net::SortOptions();
@@ -346,6 +386,7 @@ private:
   static constexpr int kSearchValIdx = 100;
   static constexpr int kGearValIdx = 101;
   static constexpr int kSortValIdx = 102;
+  static constexpr int kArchValIdx = 103;
   static constexpr float kCardHeight = 64.f;
   static constexpr float kScrollStep = 42.f;
 
@@ -370,8 +411,10 @@ private:
       mTabRects[i] = tabStrip.GetFromLeft(tabWidth).GetHShifted(tabWidth * static_cast<float>(i)).GetPadded(-2.f);
 
     const auto filterStrip = mTabsRect.GetFromRight(mTabsRect.W() * 0.40f);
-    mGearRect = filterStrip.GetFromLeft(filterStrip.W() * 0.48f).GetPadded(-2.f);
-    mSortRect = filterStrip.GetFromRight(filterStrip.W() * 0.48f).GetPadded(-2.f);
+    const float pill = filterStrip.W() / 3.f;
+    mGearRect = filterStrip.GetFromLeft(pill).GetPadded(-2.f);
+    mArchRect = filterStrip.GetFromLeft(pill).GetHShifted(pill).GetPadded(-2.f);
+    mSortRect = filterStrip.GetFromRight(pill).GetPadded(-2.f);
 
     area = area.GetReducedFromTop(34.f);
     mSearchRect = area.GetFromTop(30.f);
@@ -412,7 +455,7 @@ private:
     // Search sets the Browse tab itself. Calling ShowTab first would route back
     // into a search with the previous query, claim the one allowed in-flight
     // operation, and get this one dropped.
-    mController.Search(mQuery, mGear, mSort, 0, page, mFormat);
+    mController.Search(mQuery, mGear, mSort, mArchitecture, page, mFormat);
     SetDirty(false);
   }
 
@@ -436,6 +479,16 @@ private:
       mGearMenu.AddItem(filter.label);
 
     GetUI()->CreatePopupMenu(*this, mGearMenu, mGearRect, kGearValIdx);
+  }
+
+  void ShowArchitectureMenu()
+  {
+    mArchMenu.Clear();
+
+    for (const auto& architecture : ArchitectureFilters())
+      mArchMenu.AddItem(architecture.label);
+
+    GetUI()->CreatePopupMenu(*this, mArchMenu, mArchRect, kArchValIdx);
   }
 
   void ShowSortMenu()
@@ -510,6 +563,7 @@ private:
   void DrawFilters(IGraphics& g)
   {
     DrawPill(g, mGearRect, mGearLabel.c_str(), PluginColors::INK_MUTED, false, true);
+    DrawPill(g, mArchRect, mArchLabel.c_str(), PluginColors::INK_MUTED, false, true);
     DrawPill(g, mSortRect, SortLabel(mSort), PluginColors::INK_MUTED, false, true);
   }
 
@@ -688,16 +742,22 @@ private:
   std::string mQuery;
   std::string mGear;
   std::string mFormat; ///< format filter; IR is a format, not a gear
+  /// A2 by default: omitting the parameter is documented to exclude A2, and
+  /// that is where most current captures are.
+  int mArchitecture = 2;
+  std::string mArchLabel = "A2 models";
+
   std::string mGearLabel = "All gear"; ///< what the pill shows; mGear is the API value
   std::string mSort = "trending";
 
   IPopupMenu mGearMenu;
   IPopupMenu mSortMenu;
+  IPopupMenu mArchMenu;
 
   float mScrollOffset = 0.f;
   int mHoverRow = -1;
 
-  IRECT mHeaderRect, mAuthRect, mTabsRect, mGearRect, mSortRect;
+  IRECT mHeaderRect, mAuthRect, mTabsRect, mGearRect, mArchRect, mSortRect;
   IRECT mSearchRect, mListRect, mFooterRect, mPrevRect, mNextRect;
   IRECT mTabRects[kNumTabs];
 };

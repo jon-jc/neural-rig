@@ -31,7 +31,6 @@ enum class SlotKind
 {
   Pedal,
   Amp,
-  Cab,
 
   /// The cabinet impulse response. Not a capture slot: it is a .wav convolved
   /// after the chain, so it has its own parameter and its own loader. It gets a
@@ -46,7 +45,6 @@ inline const char* SlotLabel(SlotKind kind)
   {
     case SlotKind::Pedal: return "PEDAL";
     case SlotKind::Amp: return "AMP";
-    case SlotKind::Cab: return "CAB";
     case SlotKind::IR: return "IR";
   }
 
@@ -61,7 +59,6 @@ inline const char* SlotPlaceholder(SlotKind kind)
   {
     case SlotKind::Pedal: return "Select a Pedal from the browser";
     case SlotKind::Amp: return "Select an Amp from the browser";
-    case SlotKind::Cab: return "Select a Cab from the browser";
     case SlotKind::IR: return "Select an IR from the browser";
   }
 
@@ -74,7 +71,6 @@ inline IColor SlotAccent(SlotKind kind)
   {
     case SlotKind::Pedal: return PluginColors::GEAR_PEDAL;
     case SlotKind::Amp: return PluginColors::GEAR_AMP_CAB;
-    case SlotKind::Cab: return PluginColors::GEAR_CAB;
     case SlotKind::IR: return PluginColors::GEAR_SPACE;
   }
 
@@ -82,15 +78,20 @@ inline IColor SlotAccent(SlotKind kind)
 }
 
 /// The gear values this slot browses for, joined by the caller into the API's
-/// underscore-separated form. A cab slot wants impulse responses too, and an
-/// amp slot should surface amp-cab captures rather than hiding them.
+/// underscore-separated form.
+///
+/// The amp slot asks for amp and amp-cab together. A full-rig capture is still
+/// an amp as far as this slot is concerned -- it is one .nam that happens to
+/// include a cabinet -- and since the cab slot is gone, these are how you get a
+/// speaker in the chain without a separate IR.
+///
+/// The IR slot has no gear at all: an impulse response is a format.
 inline std::vector<std::string> SlotGears(SlotKind kind)
 {
   switch (kind)
   {
     case SlotKind::Pedal: return {"pedal"};
     case SlotKind::Amp: return {"amp", "amp-cab"};
-    case SlotKind::Cab: return {"cab"};
     case SlotKind::IR: return {};
   }
 
@@ -102,6 +103,7 @@ class RigSlotControl : public IControl
 public:
   using SlotAction = std::function<void(int slot)>;
   using DropAction = std::function<void(int slot, const char* path)>;
+  using ExpandAction = std::function<void(int slot, bool expanded)>;
 
   RigSlotControl(const IRECT& bounds, int slot, SlotKind kind, int activeParam, SlotAction onBrowse,
                  SlotAction onClear, DropAction onDrop)
@@ -113,6 +115,26 @@ public:
   , mOnDrop(std::move(onDrop))
   {
   }
+
+  /// The host attaches this slot's knobs and shows them when the card expands.
+  void SetExpandAction(ExpandAction onExpand) { mOnExpand = std::move(onExpand); }
+
+  /// Clearing a slot must close its controls: they belong to a capture that is
+  /// no longer there.
+  void SetCaptureNameAndCollapse(const char* name)
+  {
+    SetCaptureName(name);
+
+    if (!HasCapture() && mExpanded)
+    {
+      mExpanded = false;
+
+      if (mOnExpand)
+        mOnExpand(mSlot, false);
+    }
+  }
+
+  bool IsExpanded() const { return mExpanded; }
 
   /// Dropping a file onto a card fills it. The empty state advertises this, so
   /// it has to work: iPlug2 already routes the platform's drop to the control
@@ -193,9 +215,9 @@ public:
       }
     }
 
-    // Anywhere else on the card opens the browser aimed at this slot. An empty
-    // card is one big target rather than a small "browse" button, since filling
-    // it is the only thing it is for.
+    // Only the empty area browses. The knobs live in the lower half of the
+    // card and take their own clicks, so a click that reaches here is on the
+    // card's chrome.
     if (mOnBrowse)
       mOnBrowse(mSlot);
   }
@@ -225,11 +247,16 @@ private:
 
     // Rows sized for the type they hold, with the clear button clear of the
     // label rather than sharing its baseline.
+    // A fixed top band for the text and a fixed bottom band for the knobs. The
+    // two used to overlap: the knob row was laid out from the card's bottom
+    // while the subtitle was measured from its top, so on a loaded card the
+    // knob labels landed on top of the placeholder text and neither was
+    // readable.
     mLabelRect = inner.GetFromTop(16.f);
     mClearRect = mLabelRect.GetFromRight(18.f);
-    mTitleRect = inner.GetFromTop(52.f).GetReducedFromTop(22.f);
-    mSubtitleRect = inner.GetFromTop(74.f).GetReducedFromTop(52.f);
-    mPowerRect = inner.GetFromBottom(30.f).GetFromRight(30.f);
+    mTitleRect = inner.GetFromTop(50.f).GetReducedFromTop(22.f);
+    mSubtitleRect = inner.GetFromTop(72.f).GetReducedFromTop(50.f);
+    mPowerRect = inner.GetFromTop(18.f).GetFromRight(26.f).GetHShifted(-24.f);
   }
 
   void DrawClear(IGraphics& g, const IColor& accent)
@@ -265,6 +292,8 @@ private:
 
   std::string mCaptureName;
   bool mHovered = false;
+  bool mExpanded = false;
+  ExpandAction mOnExpand;
 
   IRECT mLabelRect, mTitleRect, mSubtitleRect, mClearRect, mPowerRect;
 };

@@ -215,7 +215,11 @@ public:
   bool GetCurrentUser(User& result, std::string& error);
 
   /// Lists the downloadable models belonging to a tone. Blocking.
-  bool ListModels(int toneId, std::vector<Model>& result, std::string& error);
+  ///
+  /// Takes an architecture for the same reason the search does: omitting it is
+  /// documented as "A1 + Custom", so an A2 tone answers with an empty list and
+  /// the download fails as "no downloadable models". 0 omits the parameter.
+  bool ListModels(int toneId, std::vector<Model>& result, std::string& error, int architecture = 0);
 
   /// Downloads a model file to disk. The URL requires the bearer token, so it
   /// cannot be fetched with a plain unauthenticated request. Blocking.
