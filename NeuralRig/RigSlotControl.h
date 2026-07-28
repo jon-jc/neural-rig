@@ -103,6 +103,7 @@ class RigSlotControl : public IControl
 public:
   using SlotAction = std::function<void(int slot)>;
   using DropAction = std::function<void(int slot, const char* path)>;
+  using ExpandAction = std::function<void(int slot, bool expanded)>;
 
   RigSlotControl(const IRECT& bounds, int slot, SlotKind kind, int activeParam, SlotAction onBrowse,
                  SlotAction onClear, DropAction onDrop)
@@ -114,6 +115,26 @@ public:
   , mOnDrop(std::move(onDrop))
   {
   }
+
+  /// The host attaches this slot's knobs and shows them when the card expands.
+  void SetExpandAction(ExpandAction onExpand) { mOnExpand = std::move(onExpand); }
+
+  /// Clearing a slot must close its controls: they belong to a capture that is
+  /// no longer there.
+  void SetCaptureNameAndCollapse(const char* name)
+  {
+    SetCaptureName(name);
+
+    if (!HasCapture() && mExpanded)
+    {
+      mExpanded = false;
+
+      if (mOnExpand)
+        mOnExpand(mSlot, false);
+    }
+  }
+
+  bool IsExpanded() const { return mExpanded; }
 
   /// Dropping a file onto a card fills it. The empty state advertises this, so
   /// it has to work: iPlug2 already routes the platform's drop to the control
@@ -194,9 +215,9 @@ public:
       }
     }
 
-    // Anywhere else on the card opens the browser aimed at this slot. An empty
-    // card is one big target rather than a small "browse" button, since filling
-    // it is the only thing it is for.
+    // Only the empty area browses. The knobs live in the lower half of the
+    // card and take their own clicks, so a click that reaches here is on the
+    // card's chrome.
     if (mOnBrowse)
       mOnBrowse(mSlot);
   }
@@ -226,11 +247,16 @@ private:
 
     // Rows sized for the type they hold, with the clear button clear of the
     // label rather than sharing its baseline.
+    // A fixed top band for the text and a fixed bottom band for the knobs. The
+    // two used to overlap: the knob row was laid out from the card's bottom
+    // while the subtitle was measured from its top, so on a loaded card the
+    // knob labels landed on top of the placeholder text and neither was
+    // readable.
     mLabelRect = inner.GetFromTop(16.f);
     mClearRect = mLabelRect.GetFromRight(18.f);
-    mTitleRect = inner.GetFromTop(52.f).GetReducedFromTop(22.f);
-    mSubtitleRect = inner.GetFromTop(74.f).GetReducedFromTop(52.f);
-    mPowerRect = inner.GetFromBottom(30.f).GetFromRight(30.f);
+    mTitleRect = inner.GetFromTop(50.f).GetReducedFromTop(22.f);
+    mSubtitleRect = inner.GetFromTop(72.f).GetReducedFromTop(50.f);
+    mPowerRect = inner.GetFromTop(18.f).GetFromRight(26.f).GetHShifted(-24.f);
   }
 
   void DrawClear(IGraphics& g, const IColor& accent)
@@ -266,6 +292,8 @@ private:
 
   std::string mCaptureName;
   bool mHovered = false;
+  bool mExpanded = false;
+  ExpandAction mOnExpand;
 
   IRECT mLabelRect, mTitleRect, mSubtitleRect, mClearRect, mPowerRect;
 };

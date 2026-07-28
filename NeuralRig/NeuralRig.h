@@ -71,6 +71,27 @@ enum EParams
   // through a matching delay, so the reported latency does not move.
   kSlot1Active,
   kSlot2Active,
+  // Per-stage output trim, so a hot pedal capture can be brought back before it
+  // hits the amp rather than only at the end of the chain.
+  kSlot1Out,
+  kSlot2Out,
+  kIROut,
+  // Drive into a stage. A capture responds to level the way the real thing
+  // does, so pushing it harder is the control that actually changes character
+  // rather than just loudness.
+  kSlot1Drive,
+  kSlot2Drive,
+  // Cabinet voicing. Low and high cut are what every cab sim gives you,
+  // because an IR on its own is almost always too boomy and too fizzy.
+  kIRLowCut,
+  kIRHighCut,
+  // Tone after each capture, where a pedal's tone control actually sits: after
+  // the clipping stage, not before it.
+  kSlot1Tone,
+  kSlot2Tone,
+  // Dry blend per stage, delay-matched to that stage's latency.
+  kSlot1Mix,
+  kSlot2Mix,
   kNumParams
 };
 
@@ -78,6 +99,30 @@ enum EParams
 inline int SlotActiveParam(size_t slot)
 {
   return kSlot1Active + static_cast<int>(slot);
+}
+
+// Parameter index of a slot's output trim.
+inline int SlotOutParam(size_t slot)
+{
+  return kSlot1Out + static_cast<int>(slot);
+}
+
+// Parameter index of a slot's input drive.
+inline int SlotDriveParam(size_t slot)
+{
+  return kSlot1Drive + static_cast<int>(slot);
+}
+
+// Parameter index of a slot's tone control.
+inline int SlotToneParam(size_t slot)
+{
+  return kSlot1Tone + static_cast<int>(slot);
+}
+
+// Parameter index of a slot's dry blend.
+inline int SlotMixParam(size_t slot)
+{
+  return kSlot1Mix + static_cast<int>(slot);
 }
 
 const int numKnobs = 6;
@@ -402,6 +447,16 @@ private:
   // reported latency and the host re-aligns mid-session -- audible as the
   // whole track jumping.
   std::vector<double> mSlotBypassDelay[kNumSlots];
+
+  /// The dry copy of each stage's input, held so it can be delayed to match
+  /// that stage's latency before being blended back in. Without the delay a
+  /// dry/wet control is a comb filter whose notches move with the sample rate,
+  /// which is why this could not just be a lerp.
+  std::vector<iplug::sample> mSlotDry[kNumSlots];
+  iplug::sample* mSlotDryPointers[kNumSlots][kNumChannelsInternal] = {};
+
+  /// Post-capture tone, one per stage.
+  recursive_linear_filter::LowPass mSlotTone[kNumSlots];
   int mSlotBypassWrite[kNumSlots] = {};
   int mSlotBypassLength[kNumSlots] = {};
 
@@ -413,6 +468,10 @@ private:
 
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
+
+  // Cabinet voicing, applied to the IR's output.
+  recursive_linear_filter::HighPass mIRLowCut;
+  recursive_linear_filter::LowPass mIRHighCut;
   //  recursive_linear_filter::LowPass mLowPass;
 
   // Path to each slot's model.nam

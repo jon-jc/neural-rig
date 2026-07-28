@@ -700,6 +700,7 @@ void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
   int toneId = 0;
   std::string title;
   std::string format;
+  int architecture = 0;
 
   {
     std::lock_guard<std::mutex> lock(mMutex);
@@ -707,18 +708,24 @@ void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
     if (rowIndex < 0 || rowIndex >= static_cast<int>(mTones.size()))
       return;
 
+    architecture = mLastQuery.architecture;
+
     toneId = mTones[rowIndex].id;
     title = mTones[rowIndex].title;
     format = mTones[rowIndex].format;
   }
 
-  RunAsync([this, toneId, title, format, onComplete = std::move(onComplete)] {
+  RunAsync([this, toneId, title, format, architecture, onComplete = std::move(onComplete)] {
     SetStatus(Status::Working, "Fetching capture...");
 
     std::vector<Model> models;
     std::string error;
 
-    if (!mClient.ListModels(toneId, models, error))
+    // Same architecture the search used. Asking for a tone found under A2 with
+    // the endpoint's A1+Custom default returns nothing, and the download then
+    // fails as "no downloadable models" -- which is what made A2 captures
+    // visible in the browser and impossible to load.
+    if (!mClient.ListModels(toneId, models, error, architecture))
     {
       SetStatus(Status::Failed, error);
       if (onComplete)

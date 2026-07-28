@@ -638,9 +638,12 @@ bool Tone3000Client::GetCurrentUser(User& result, std::string& error)
   return true;
 }
 
-bool Tone3000Client::ListModels(int toneId, std::vector<Model>& result, std::string& error)
+bool Tone3000Client::ListModels(int toneId, std::vector<Model>& result, std::string& error, int architecture)
 {
-  const std::string path = "/api/v1/models?tone_id=" + std::to_string(toneId) + "&page_size=50";
+  std::string path = "/api/v1/models?tone_id=" + std::to_string(toneId) + "&page_size=50";
+
+  if (architecture > 0)
+    path += "&architecture=" + std::to_string(architecture);
 
   std::string body;
   if (!AuthorisedGet(path, body, error))
