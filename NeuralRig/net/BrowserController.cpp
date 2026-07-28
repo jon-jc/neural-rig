@@ -695,6 +695,97 @@ bool BrowserController::DownloadTone(int toneId, const std::string& title, const
   return true;
 }
 
+void BrowserController::FetchModelChoices(int rowIndex)
+{
+  int toneId = 0;
+  int architecture = 0;
+
+  {
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(mTones.size()))
+      return;
+
+    toneId = mTones[static_cast<size_t>(rowIndex)].id;
+    architecture = mLastQuery.architecture;
+
+    // Clear first, so the UI can tell "still fetching" from "fetched, and this
+    // tone genuinely has one variant".
+    mSnapshot.modelChoices.clear();
+    mSnapshot.modelChoicesRow = -1;
+  }
+
+  RunAsync([this, rowIndex, toneId, architecture] {
+    SetStatus(Status::Working, "Reading variants...");
+
+    std::vector<Model> models;
+    std::string error;
+
+    if (!mClient.ListModels(toneId, models, error, architecture))
+    {
+      SetStatus(Status::Failed, error);
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(mMutex);
+
+      mSnapshot.modelChoices.clear();
+      mSnapshot.modelChoices.reserve(models.size());
+
+      for (const auto& model : models)
+        mSnapshot.modelChoices.push_back({model.id, model.name, model.size, model.modelUrl});
+
+      mSnapshot.modelChoicesRow = rowIndex;
+    }
+
+    SetStatus(Status::Idle, "Connected");
+  });
+}
+
+void BrowserController::DownloadChoice(const ModelChoice& choice, const std::string& title, LoadCallback onComplete)
+{
+  RunAsync([this, choice, title, onComplete = std::move(onComplete)] {
+    SetStatus(Status::Working, "Fetching capture...");
+
+    const auto directory = CacheDirectory();
+
+    if (directory.empty())
+    {
+      const std::string message = "Could not create the model cache directory";
+      SetStatus(Status::Failed, message);
+      if (onComplete)
+        onComplete(false, message);
+      return;
+    }
+
+    Model model;
+    model.id = choice.id;
+    model.modelUrl = choice.url;
+    model.size = choice.size;
+
+    // The variant's own name, so two variants of one tone do not collide in
+    // the cache and are told apart on the Local tab.
+    const auto label = title + "-" + (choice.name.empty() ? std::string("model") : choice.name);
+    const auto path = CacheFilePath(directory, label, model, {});
+
+    std::string error;
+
+    if (!mClient.DownloadModel(model, path, error))
+    {
+      SetStatus(Status::Failed, error);
+      if (onComplete)
+        onComplete(false, error);
+      return;
+    }
+
+    SetStatus(Status::Idle, "Loaded " + title);
+
+    if (onComplete)
+      onComplete(true, path);
+  });
+}
+
 void BrowserController::DownloadRow(int rowIndex, LoadCallback onComplete)
 {
   int toneId = 0;

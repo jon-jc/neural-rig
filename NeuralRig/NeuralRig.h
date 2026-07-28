@@ -513,6 +513,13 @@ private:
   /// The window is centred once, after the startup collapse.
   bool mWindowCentred = false;
 
+  /// A preset waiting to be applied, and its guard. Restoring state restages
+  /// models and rewrites the paths the audio thread reads, so it cannot run
+  /// from inside the control callback that asked for it -- the same shape as
+  /// the resize and close crashes.
+  std::string mPendingPresetName;
+  std::mutex mPendingPresetMutex;
+
 
 
   // Captures the browser has downloaded, waiting to be staged. The download

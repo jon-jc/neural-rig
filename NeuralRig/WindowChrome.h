@@ -223,12 +223,16 @@ private:
   bool mDragging = false;
 };
 
-/// What a caption-bar button does. There is no maximise: the layout holds one
-/// size, and offering a maximise that cannot be honoured is worse than not
-/// offering it.
+/// What a caption-bar button does.
+///
+/// Close only. There is no maximise -- the layout holds one size -- and no
+/// minimise either: a borderless WS_POPUP has no taskbar button, so minimising
+/// it puts the window somewhere with no way back. Giving it one means either
+/// WS_EX_APPWINDOW, which destabilised input on the live window, or restoring
+/// the OS caption, which is the thing this window exists without. A button
+/// that strands the window is worse than no button.
 enum class WindowButton
 {
-  Minimise,
   Close,
 };
 
@@ -267,9 +271,6 @@ public:
         g.DrawLine(colour, glyph.R, glyph.T, glyph.L, glyph.B, nullptr, 1.6f);
         break;
 
-      case WindowButton::Minimise:
-        g.DrawLine(colour, glyph.L, glyph.MH(), glyph.R, glyph.MH(), nullptr, 1.6f);
-        break;
     }
   }
 
@@ -286,10 +287,6 @@ public:
       // Posted rather than sent: this runs from a mouse handler, and closing
       // the window tears down the graphics context underneath us.
       case WindowButton::Close: PostMessage(window, WM_CLOSE, 0, 0); break;
-      // SC_MINIMIZE through the system menu rather than ShowWindow: on a
-        // borderless popup ShowWindow(SW_MINIMIZE) took the window down
-        // entirely instead of minimising it.
-      case WindowButton::Minimise: PostMessage(window, WM_SYSCOMMAND, SC_MINIMIZE, 0); break;
     }
 #endif
   }
