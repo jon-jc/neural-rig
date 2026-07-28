@@ -158,7 +158,29 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
   mLayoutFunc = [&](IGraphics* pGraphics) {
 
+    // Draw the menus and the text entry ourselves rather than letting the OS
+    // do it. Without these, CreatePopupMenu and CreateTextEntry fall back to
+    // native widgets -- a white Windows menu and a white edit box dropped into
+    // a near-black panel.
+    // The text entry's own fill lives on the IText, not on the control, so a
+    // plain IText leaves it at the platform default -- a white box.
+    const IText menuText =
+      IText(14.f, PluginColors::INK, "Roboto-Regular").WithTEColors(PluginColors::WELL, PluginColors::INK);
+
+    pGraphics->AttachPopupMenuControl(menuText);
     pGraphics->AttachTextEntryControl();
+
+    // IPopupMenuControl defaults to white panel, blue cells, black text. Left
+    // alone it is a stock widget dropped into a near-black plugin.
+    if (auto* menu = pGraphics->GetPopupMenuControl())
+    {
+      menu->SetPanelColor(PluginColors::PANEL);
+      menu->SetCellBackgroundColor(PluginColors::AMBER.WithOpacity(0.22f));
+      menu->SetItemColor(PluginColors::INK);
+      menu->SetItemMouseoverColor(PluginColors::AMBER);
+      menu->SetDisabledItemColor(PluginColors::INK_DIM);
+      menu->SetSeparatorColor(PluginColors::PANEL_HI);
+    }
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
     pGraphics->EnableMultiTouch(true);
@@ -215,13 +237,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Caption-bar buttons, right to left in the usual order. No maximise: the
     // layout holds one size, so offering one would be a button that lies.
     const auto closeButtonArea = headerArea.GetFromRight(30.f).GetMidVPadded(15.f);
-    const auto minimiseButtonArea = closeButtonArea.GetHShifted(-36.f);
 
     // File and Options, where the OS menu bar used to be but inside the
     // plugin's own surface so they follow the theme.
     const auto fileMenuArea = headerArea.GetFromLeft(58.f).GetMidVPadded(13.f);
     const auto optionsMenuArea = fileMenuArea.GetHShifted(62.f);
-    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-76.f).GetMidVPadded(17.f);
+    const auto settingsButtonArea = headerArea.GetFromRight(34.f).GetHShifted(-40.f).GetMidVPadded(17.f);
     // Between the wordmark's lane and the window buttons', not centred on the
     // window -- centring is what walked it into the title.
     const auto presetBarArea = headerArea.GetReducedFromLeft(456.f).GetReducedFromRight(146.f).GetMidVPadded(15.f);
@@ -579,6 +600,21 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           });
         });
 
+      // Picking a specific variant takes the same route into the rig as the
+      // automatic pick, so both land in the slot the same way.
+      browserPanel->SetChoiceHandler(
+        [this](const nr::net::BrowserController::ModelChoice& choice, const nr::net::BrowserController::Row& row) {
+          const int slot = mBrowserTargetSlot;
+
+          mBrowser.DownloadChoice(choice, row.title, [this, slot](bool success, std::string pathOrError) {
+            if (!success)
+              return;
+
+            std::lock_guard<std::mutex> lock(mPendingLoadMutex);
+            mPendingLoads.emplace_back(slot, pathOrError);
+          });
+        });
+
       pGraphics->AttachControl(browserPanel, kCtrlTagT3KBrowser)->Hide(!mBrowserOpen);
 
       // The handle that opens it without going through a slot.
@@ -595,8 +631,6 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
       // Replace the caption-bar buttons that went with the OS frame. Inert in
       // plugin builds, where the host owns the window.
-      pGraphics->AttachControl(
-        new nr::shell::WindowButtonControl(minimiseButtonArea, nr::shell::WindowButton::Minimise));
       pGraphics->AttachControl(new nr::shell::WindowButtonControl(closeButtonArea, nr::shell::WindowButton::Close));
 
       pGraphics->AttachControl(new nr::shell::WindowMenuControl(fileMenuArea, "File", true));
@@ -621,14 +655,12 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
               nr::presets::Save(name, chunk);
           },
           [this](const std::string& name) {
-            IByteChunk chunk;
-            if (!nr::presets::Load(name, chunk))
-              return;
-
-            UnserializeState(chunk, 0);
-            OnParamReset(EParamSource::kPresetRecall);
-            if (auto* ui = GetUI())
-              ui->SetAllControlsDirty();
+            // Requested, not applied. Restoring state restages every model and
+            // rewrites the paths ProcessBlock reads; doing that from inside the
+            // menu callback that asked for it tears down state while this
+            // handler is still using it.
+            std::lock_guard<std::mutex> lock(mPendingPresetMutex);
+            mPendingPresetName = name;
           }),
         kCtrlTagPresetBar);
     }
@@ -891,6 +923,56 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
 
 void NeuralRig::OnIdle()
 {
+  // Apply a requested preset here, where no control is mid-callback.
+  {
+    std::string presetName;
+    {
+      std::lock_guard<std::mutex> lock(mPendingPresetMutex);
+      presetName.swap(mPendingPresetName);
+    }
+
+    if (!presetName.empty())
+    {
+      IByteChunk chunk;
+
+      if (nr::presets::Load(presetName, chunk))
+      {
+        // Guarded: a preset written by a build with a different parameter list
+        // deserialises into garbage lengths, and the reader will happily walk
+        // off the end of the chunk chasing them.
+        try
+        {
+          const int consumed = UnserializeState(chunk, 0);
+
+          if (consumed <= 0)
+            throw std::runtime_error("That preset could not be read.");
+
+          OnParamReset(EParamSource::kPresetRecall);
+
+          // Push the restored values out to the controls. Setting a parameter
+          // does not update the control that displays it -- controls hold their
+          // own copy -- so without this the rig was correctly restored while
+          // every knob still showed its old position, and the next click on one
+          // would write that stale value straight back over the preset.
+          SendCurrentParamValuesFromDelegate();
+        }
+        catch (const std::exception& e)
+        {
+          _ShowMessageBox(GetUI(), e.what(), "Failed to load preset", kMB_OK);
+        }
+        catch (...)
+        {
+          _ShowMessageBox(GetUI(), "That preset could not be read.", "Failed to load preset", kMB_OK);
+        }
+      }
+
+      if (auto* pGraphics = GetUI())
+        pGraphics->SetAllControlsDirty();
+
+      return;
+    }
+  }
+
   // Once, after the window exists. Doing it during layout is too early -- the
   // top-level window is not final yet.
   if (!mNativeMenuRemoved)

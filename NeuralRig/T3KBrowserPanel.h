@@ -163,6 +163,12 @@ class T3KBrowserPanel : public IControl
 public:
   using LoadHandler = std::function<void(int rowIndex, const nr::net::BrowserController::Row& row)>;
 
+  /// Fired when the user picks one variant of a multi-model tone.
+  using ChoiceHandler =
+    std::function<void(const nr::net::BrowserController::ModelChoice&, const nr::net::BrowserController::Row&)>;
+
+  void SetChoiceHandler(ChoiceHandler onChoice) { mOnChoice = std::move(onChoice); }
+
   T3KBrowserPanel(const IRECT& bounds, nr::net::BrowserController& controller, LoadHandler onLoad)
   : IControl(bounds)
   , mController(controller)
@@ -188,22 +194,41 @@ public:
 
   void OnResize() override { LayOut(); }
 
-  void OnAttached() override
-  {
-    LayOut();
-    mController.Begin();
-    mController.ShowTab(nr::net::BrowserController::Tab::Browse);
-  }
+  void OnAttached() override { LayOut(); }
 
   /// Polled from the editor's idle callback. Redraws only when the controller
   /// says something changed, so an idle browser costs nothing.
   void Poll()
   {
+    // Startup work happens here, not in OnAttached. OnAttached runs while the
+    // control tree is still being assembled, and Begin/ShowTab each spawn a
+    // worker thread that publishes back into state the UI is concurrently
+    // reading -- an intermittent startup crash rather than a reliable one,
+    // which is exactly how it presented. By the first idle tick the editor is
+    // fully built.
+    if (!mStarted)
+    {
+      mStarted = true;
+      mController.Begin();
+      mController.ShowTab(nr::net::BrowserController::Tab::Browse);
+      return;
+    }
+
     if (mController.ConsumeDirty())
     {
       mSnapshot = mController.GetSnapshot();
       ClampScroll();
       SetDirty(false);
+
+      // The variants we asked for have landed. Opening the menu here rather
+      // than from the click keeps the fetch off the UI thread, which is the
+      // same reason every other network call in this panel is a request now
+      // and a result later.
+      if (mAwaitingChoicesForRow >= 0 && mSnapshot.modelChoicesRow == mAwaitingChoicesForRow
+          && !mSnapshot.modelChoices.empty())
+      {
+        ShowModelMenu();
+      }
     }
   }
 
@@ -266,8 +291,11 @@ public:
 
     if (mSearchRect.Contains(x, y))
     {
-      const IText entry(14.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
-      GetUI()->CreateTextEntry(*this, entry, mSearchRect, mQuery.c_str(), kSearchValIdx);
+      const IText entry = IText(14.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle)
+                            .WithTEColors(PluginColors::WELL, PluginColors::INK);
+      // kNoValIdx: see Presets.h. Any other index makes IGraphics call
+      // GetParam on this control before dispatching, which reads out of bounds.
+      GetUI()->CreateTextEntry(*this, entry, mSearchRect, mQuery.c_str(), kNoValIdx);
       return;
     }
 
@@ -298,8 +326,22 @@ public:
       return;
     }
 
+    const auto& entry = mSnapshot.rows[static_cast<size_t>(row)];
+
+    // A tone often ships several models -- the same capture at different sizes,
+    // or several settings of one pedal. Picking one for the user throws that
+    // away, so ask when there is a choice to make. One model, or a local file,
+    // loads straight away: a menu with a single entry is just a extra click.
+    if (entry.modelsCount > 1 && entry.localPath.empty())
+    {
+      mAwaitingChoicesForRow = row;
+      mController.FetchModelChoices(row);
+      SetDirty(false);
+      return;
+    }
+
     if (mOnLoad)
-      mOnLoad(row, mSnapshot.rows[static_cast<size_t>(row)]);
+      mOnLoad(row, entry);
   }
 
   void OnMouseWheel(float x, float y, const IMouseMod& mod, float delta) override
@@ -334,7 +376,7 @@ public:
 
   void OnTextEntryCompletion(const char* txt, int valIdx) override
   {
-    if (valIdx != kSearchValIdx || txt == nullptr)
+    if (txt == nullptr)
       return;
 
     mQuery = txt;
@@ -348,6 +390,21 @@ public:
       return;
 
     const int chosen = pMenu->GetChosenItemIdx();
+
+    if (valIdx == kModelValIdx)
+    {
+      const int row = mAwaitingChoicesForRow;
+      mAwaitingChoicesForRow = -1;
+
+      if (chosen < 0 || chosen >= static_cast<int>(mSnapshot.modelChoices.size()) || row < 0
+          || row >= static_cast<int>(mSnapshot.rows.size()))
+        return;
+
+      if (mOnChoice)
+        mOnChoice(mSnapshot.modelChoices[static_cast<size_t>(chosen)], mSnapshot.rows[static_cast<size_t>(row)]);
+
+      return;
+    }
 
     if (valIdx == kGearValIdx)
     {
@@ -383,10 +440,10 @@ public:
 
 private:
   static constexpr int kNumTabs = 5;
-  static constexpr int kSearchValIdx = 100;
   static constexpr int kGearValIdx = 101;
   static constexpr int kSortValIdx = 102;
   static constexpr int kArchValIdx = 103;
+  static constexpr int kModelValIdx = 104;
   static constexpr float kCardHeight = 64.f;
   static constexpr float kScrollStep = 42.f;
 
@@ -490,6 +547,28 @@ private:
 
     GetUI()->CreatePopupMenu(*this, mArchMenu, mArchRect, kArchValIdx);
   }
+
+  void ShowModelMenu()
+  {
+    mModelMenu.Clear();
+
+    for (const auto& choice : mSnapshot.modelChoices)
+    {
+      // Name and size together: two variants often share a name and differ
+      // only in size, and vice versa.
+      std::string label = choice.name.empty() ? "Model " + std::to_string(choice.id) : choice.name;
+
+      if (!choice.size.empty())
+        label += "  (" + choice.size + ")";
+
+      mModelMenu.AddItem(label.c_str());
+    }
+
+    GetUI()->CreatePopupMenu(*this, mModelMenu, mListRect.GetFromTop(1.f).GetVShifted(RowTop(mAwaitingChoicesForRow)),
+                             kModelValIdx);
+  }
+
+  float RowTop(int row) const { return static_cast<float>(row) * kCardHeight - mScrollOffset; }
 
   void ShowSortMenu()
   {
@@ -753,7 +832,11 @@ private:
   IPopupMenu mGearMenu;
   IPopupMenu mSortMenu;
   IPopupMenu mArchMenu;
+  IPopupMenu mModelMenu;
 
+  bool mStarted = false;
+  int mAwaitingChoicesForRow = -1;
+  ChoiceHandler mOnChoice;
   float mScrollOffset = 0.f;
   int mHoverRow = -1;
 

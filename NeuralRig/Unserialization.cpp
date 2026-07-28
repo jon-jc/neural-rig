@@ -55,13 +55,35 @@ void NeuralRig::_UnserializeApplyConfig(nlohmann::json& config)
   LEAVE_PARAMS_MUTEX
 
   // Legacy states carry a single model path; it becomes the first slot.
-  mNAMPaths[0].Set(static_cast<std::string>(config["NAMPath"]).c_str());
-  mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  //
+  // Read defensively. operator[] on a missing key *creates* a null, and casting
+  // that null to std::string throws type_error.302 -- so a state without these
+  // keys did not restore without a path, it threw out of the restore entirely.
+  // That is the exception preset loading was dying on.
+  const auto pathFrom = [&config](const char* key) {
+    const auto it = config.find(key);
+    return it != config.end() && it->is_string() ? it->get<std::string>() : std::string{};
+  };
 
-  if (mNAMPaths[0].GetLength())
+  // Every slot, not just the first. Restoring only slot 0 left the rest of the
+  // chain empty however many captures the preset actually held.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
   {
-    _StageModel(0, mNAMPaths[0]);
+    const auto key = "NAMPath" + std::to_string(slot);
+    auto stored = pathFrom(key.c_str());
+
+    // Fall back to the legacy single-path key for slot 0.
+    if (stored.empty() && slot == 0)
+      stored = pathFrom("NAMPath");
+
+    mNAMPaths[slot].Set(stored.c_str());
+
+    if (mNAMPaths[slot].GetLength())
+      _StageModel(slot, mNAMPaths[slot]);
   }
+
+  mIRPath.Set(pathFrom("IRPath").c_str());
+
   if (mIRPath.GetLength())
   {
     _StageIR(mIRPath);
@@ -74,8 +96,25 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
 {
   int pos = startPos;
   WDL_String path;
-  pos = chunk.GetStr(path, pos);
-  config["NAMPath"] = std::string(path.Get());
+
+  // One path per capture slot, then the IR -- matching SerializeState.
+  //
+  // This read a single NAM path and then the IR. SerializeState has written
+  // kNumSlots paths since the chain went multi-slot, so slot 1's capture was
+  // being read as the IR, the real IR string was never consumed, and every
+  // parameter after it came off the wrong offset. Presets restored a rig that
+  // was not the one saved.
+  for (size_t slot = 0; slot < kNumSlots; slot++)
+  {
+    pos = chunk.GetStr(path, pos);
+    config["NAMPath" + std::to_string(slot)] = std::string(path.Get());
+
+    // Slot 0 keeps the legacy key as well, so states written before the chain
+    // existed still find their model.
+    if (slot == 0)
+      config["NAMPath"] = std::string(path.Get());
+  }
+
   pos = chunk.GetStr(path, pos);
   config["IRPath"] = std::string(path.Get());
 
@@ -107,6 +146,11 @@ void _UpdateConfigFrom_0_7_14(nlohmann::json& config)
 
 int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
+  // Every parameter, in the order SerializeParams writes them, which is enum
+  // order. This list stopped at "Slim" while the enum kept growing, so the
+  // per-stage controls -- and the slot enables -- were written on save and
+  // never read on load. A preset restored its captures and then left every
+  // knob and toggle at whatever the plugin already had.
   std::vector<std::string> paramNames{"Input",
                                       "Threshold",
                                       "Bass",
@@ -119,7 +163,20 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
                                       "OutputMode",
-                                      "Slim"};
+                                      "Slim",
+                                      "Slot1Active",
+                                      "Slot2Active",
+                                      "Slot1Out",
+                                      "Slot2Out",
+                                      "IROut",
+                                      "Slot1Drive",
+                                      "Slot2Drive",
+                                      "IRLowCut",
+                                      "IRHighCut",
+                                      "Slot1Tone",
+                                      "Slot2Tone",
+                                      "Slot1Mix",
+                                      "Slot2Mix"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_7_14(config);
@@ -296,8 +353,19 @@ int NeuralRig::_UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk,
   }
   else
   {
-    // You shouldn't be here...
-    assert(false);
+    // Our own states land here, and used to fall off the end.
+    //
+    // The ladder above is upstream's, written against upstream's version
+    // numbers, where the current format is 0.7.14. NeuralRig's version is
+    // 0.1.0, which is older than every branch -- so every preset this plugin
+    // wrote reached the assert, which compiles out in Release. config stayed
+    // empty, applying it did nothing, and the load reported success having
+    // restored neither the captures nor a single knob.
+    //
+    // The version is the wrong thing to test. The header is the guarantee: a
+    // chunk carrying ###NeuralRig### was written by this plugin, in the format
+    // SerializeState writes today, whatever its version string says.
+    pos = _GetConfigFrom_0_7_14(chunk, pos, config);
   }
   _UnserializeApplyConfig(config);
   return pos;

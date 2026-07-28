@@ -49,6 +49,16 @@ public:
     Local,      ///< the on-disk cache; no network involved
   };
 
+  /// One variant of a tone, for the picker. A tone often ships several: the
+  /// same capture at different sizes, or several settings of the same pedal.
+  struct ModelChoice
+  {
+    int id = 0;
+    std::string name; ///< the model's identifier within the tone
+    std::string size; ///< standard, lite, feather, nano, custom
+    std::string url;
+  };
+
   /// One row in the results list, flattened for display.
   struct Row
   {
@@ -84,6 +94,11 @@ public:
     int page = 1;
     int totalPages = 0;
     int total = 0;
+
+    /// Variants of whichever row was last asked about, and which row that was.
+    /// -1 means nothing has been fetched.
+    std::vector<ModelChoice> modelChoices;
+    int modelChoicesRow = -1;
   };
 
   BrowserController();
@@ -132,6 +147,14 @@ public:
   /// callback like everything else.
   using LoadCallback = std::function<void(bool success, std::string pathOrError)>;
   void DownloadRow(int rowIndex, LoadCallback onComplete);
+
+  /// Fetches the variants of a row's tone. The result lands in the snapshot
+  /// and marks it dirty, so the UI picks it up on its next poll like anything
+  /// else here.
+  void FetchModelChoices(int rowIndex);
+
+  /// Downloads one specific variant, rather than letting the controller pick.
+  void DownloadChoice(const ModelChoice& choice, const std::string& title, LoadCallback onComplete);
 
   /// The URL an embedded browser should load to let the user pick a tone.
   std::string BuildSelectToneUrl(const PkcePair& pkce, const std::string& redirectUri) const;

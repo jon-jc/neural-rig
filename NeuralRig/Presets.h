@@ -212,8 +212,14 @@ public:
   {
     if (mSaveRect.Contains(x, y))
     {
-      const iplug::igraphics::IText entry(14.f, PluginColors::INK);
-      GetUI()->CreateTextEntry(*this, entry, mNameRect, mCurrent.empty() ? "My Rig" : mCurrent.c_str(), kSaveValIdx);
+      const auto entry =
+        iplug::igraphics::IText(14.f, PluginColors::INK).WithTEColors(PluginColors::WELL, PluginColors::INK);
+      // kNoValIdx, not an arbitrary tag. IGraphics treats anything above
+      // kNoValIdx as a value index and calls GetParam(valIdx) on this control
+      // before the completion handler ever runs -- with one value on the
+      // control, a made-up index reads far out of bounds and takes the host
+      // down with it. kNoValIdx skips that lookup entirely.
+      GetUI()->CreateTextEntry(*this, entry, mNameRect, mCurrent.empty() ? "My Rig" : mCurrent.c_str(), kNoValIdx);
       return;
     }
 
@@ -235,7 +241,7 @@ public:
 
   void OnTextEntryCompletion(const char* txt, int valIdx) override
   {
-    if (valIdx != kSaveValIdx || txt == nullptr || *txt == '\0')
+    if (txt == nullptr || *txt == '\0')
       return;
 
     const std::string name = SanitiseName(txt);
@@ -254,6 +260,12 @@ public:
 
     const int chosen = pMenu->GetChosenItemIdx();
 
+    if (chosen == mDeleteIndex && mDeleteIndex >= 0)
+    {
+      ConfirmDelete();
+      return;
+    }
+
     if (chosen < 0 || chosen >= static_cast<int>(mNames.size()))
       return;
 
@@ -267,8 +279,6 @@ public:
   }
 
 private:
-  static constexpr int kSaveValIdx = 200;
-
   void LayOut()
   {
     mPrevRect = mRECT.GetFromLeft(30.f);
@@ -296,6 +306,53 @@ private:
     SetDirty(false);
   }
 
+  /// Asks first. Deleting a preset removes a file the user made, and there is
+  /// no undo for it -- re-saving requires having the rig dialled in again.
+  /// Whichever preset the menu's delete entry refers to: the loaded one when
+  /// there is one, otherwise the entry the bar is sitting on.
+  std::string DeleteTarget() const
+  {
+    if (!mCurrent.empty())
+      return mCurrent;
+
+    if (mIndex >= 0 && mIndex < static_cast<int>(mNames.size()))
+      return mNames[static_cast<size_t>(mIndex)];
+
+    return mNames.empty() ? std::string{} : mNames.front();
+  }
+
+  void ConfirmDelete()
+  {
+    const std::string doomed = DeleteTarget();
+
+    if (doomed.empty())
+      return;
+
+    GetUI()->ShowMessageBox(("Delete the preset \"" + doomed + "\"? This cannot be undone.").c_str(), "Delete preset",
+                            iplug::igraphics::kMB_YESNO, [this, doomed](iplug::igraphics::EMsgBoxResult result) {
+                              if (result != iplug::igraphics::EMsgBoxResult::kYES)
+                                return;
+
+                              Delete(doomed);
+                              Refresh();
+
+                              // The bar should not keep naming something that
+                              // is gone; fall back to whatever is left.
+                              mCurrent.clear();
+                              mIndex = 0;
+
+                              if (!mNames.empty())
+                              {
+                                mCurrent = mNames.front();
+
+                                if (mOnLoad)
+                                  mOnLoad(mCurrent);
+                              }
+
+                              SetDirty(false);
+                            });
+  }
+
   void SelectByName(const std::string& name)
   {
     const auto it = std::find(mNames.begin(), mNames.end(), name);
@@ -307,6 +364,7 @@ private:
   void ShowMenu()
   {
     mMenu.Clear();
+    mDeleteIndex = -1;
 
     if (mNames.empty())
     {
@@ -317,6 +375,19 @@ private:
     {
       for (const auto& name : mNames)
         mMenu.AddItem(name.c_str());
+
+      // Delete targets the highlighted entry, not "whatever is loaded". It
+      // used to require mCurrent, which is empty until something is loaded or
+      // saved in this session -- so opening the menu fresh showed no delete at
+      // all, which is exactly how it was reported missing.
+      //
+      // Its index is recorded as the menu is built rather than worked out
+      // afterwards: the separator makes the arithmetic non-obvious, and index
+      // arithmetic against a menu built elsewhere is what made the browser's
+      // gear filter send the wrong value.
+      mMenu.AddSeparator();
+      mDeleteIndex = mMenu.NItems();
+      mMenu.AddItem(("Delete \"" + DeleteTarget() + "\"").c_str());
     }
 
     GetUI()->CreatePopupMenu(*this, mMenu, mNameRect);
@@ -339,6 +410,7 @@ private:
   std::vector<std::string> mNames;
   std::string mCurrent;
   int mIndex = 0;
+  int mDeleteIndex = -1; ///< menu index of the delete entry, -1 when absent
 
   iplug::igraphics::IPopupMenu mMenu;
   iplug::igraphics::IRECT mNameRect, mPrevRect, mNextRect, mSaveRect;
