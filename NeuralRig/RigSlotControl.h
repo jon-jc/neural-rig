@@ -31,7 +31,6 @@ enum class SlotKind
 {
   Pedal,
   Amp,
-  Cab,
 
   /// The cabinet impulse response. Not a capture slot: it is a .wav convolved
   /// after the chain, so it has its own parameter and its own loader. It gets a
@@ -46,7 +45,6 @@ inline const char* SlotLabel(SlotKind kind)
   {
     case SlotKind::Pedal: return "PEDAL";
     case SlotKind::Amp: return "AMP";
-    case SlotKind::Cab: return "CAB";
     case SlotKind::IR: return "IR";
   }
 
@@ -61,7 +59,6 @@ inline const char* SlotPlaceholder(SlotKind kind)
   {
     case SlotKind::Pedal: return "Select a Pedal from the browser";
     case SlotKind::Amp: return "Select an Amp from the browser";
-    case SlotKind::Cab: return "Select a Cab from the browser";
     case SlotKind::IR: return "Select an IR from the browser";
   }
 
@@ -74,7 +71,6 @@ inline IColor SlotAccent(SlotKind kind)
   {
     case SlotKind::Pedal: return PluginColors::GEAR_PEDAL;
     case SlotKind::Amp: return PluginColors::GEAR_AMP_CAB;
-    case SlotKind::Cab: return PluginColors::GEAR_CAB;
     case SlotKind::IR: return PluginColors::GEAR_SPACE;
   }
 
@@ -84,9 +80,10 @@ inline IColor SlotAccent(SlotKind kind)
 /// The gear values this slot browses for, joined by the caller into the API's
 /// underscore-separated form.
 ///
-/// The amp slot asks for amps only. It used to include amp-cab on the reasoning
-/// that most of the library is captured as full rigs, but that made the amp card
-/// return cabs as well, which is not what the card says it does.
+/// The amp slot asks for amp and amp-cab together. A full-rig capture is still
+/// an amp as far as this slot is concerned -- it is one .nam that happens to
+/// include a cabinet -- and since the cab slot is gone, these are how you get a
+/// speaker in the chain without a separate IR.
 ///
 /// The IR slot has no gear at all: an impulse response is a format.
 inline std::vector<std::string> SlotGears(SlotKind kind)
@@ -94,8 +91,7 @@ inline std::vector<std::string> SlotGears(SlotKind kind)
   switch (kind)
   {
     case SlotKind::Pedal: return {"pedal"};
-    case SlotKind::Amp: return {"amp"};
-    case SlotKind::Cab: return {"cab"};
+    case SlotKind::Amp: return {"amp", "amp-cab"};
     case SlotKind::IR: return {};
   }
 

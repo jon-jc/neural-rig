@@ -360,8 +360,8 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // One card per stage. Clicking anywhere on a card opens the browser
     // already filtered to what can go in it, so choosing a pedal never means
     // scrolling past amps first.
-    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {
-      nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp, nr::rig::SlotKind::Cab, nr::rig::SlotKind::IR};
+    static constexpr nr::rig::SlotKind kSlotKinds[kNumCards] = {nr::rig::SlotKind::Pedal, nr::rig::SlotKind::Amp,
+                                                                nr::rig::SlotKind::IR};
 
     for (int card = 0; card < kNumCards; card++)
     {
@@ -389,14 +389,10 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         for (const auto& gear : nr::rig::SlotGears(kind))
           joined += joined.empty() ? gear : "_" + gear;
 
-        // An IR is a format rather than a gear, so the IR card filters on
-        // format with the gear left open -- it is the only way to ask for one.
-        //
-        // The cab card pins format=nam for the opposite reason: gear=cab alone
-        // returns mostly impulse responses, and those belong to the IR card.
-        // There are fewer NAM cab captures in the library, but they are what
-        // this card actually loads.
-        const char* format = isIR ? "ir" : (kind == nr::rig::SlotKind::Cab ? "nam" : "");
+        // A capture slot can only load a .nam, so it says so. The IR card is
+        // the mirror image: an impulse response is a format rather than a gear,
+        // so format=ir with the gear left open is the only way to ask for one.
+        const char* format = isIR ? "ir" : "nam";
 
         static_cast<nr::browser::T3KBrowserPanel*>(panel)->FocusGears(joined, nr::rig::SlotLabel(kind), format);
         pGraphics->SetAllControlsDirty();
@@ -858,9 +854,20 @@ void NeuralRig::OnIdle()
       const bool isIRTarget = slot >= static_cast<int>(kNumSlots);
 
       if (extension == ".wav" || isIRTarget)
+      {
         _LoadIRWithFeedback(filePath);
+      }
       else if (slot >= 0)
-        _StageModel(static_cast<size_t>(slot), filePath);
+      {
+        // _StageModel returns why it failed, and that return value was being
+        // discarded -- so a capture that would not load did nothing at all, with
+        // no message anywhere. An invisible failure is indistinguishable from a
+        // broken download or a broken filter, which is exactly how it looked.
+        const std::string message = _StageModel(static_cast<size_t>(slot), filePath);
+
+        if (!message.empty())
+          _ShowMessageBox(GetUI(), message.c_str(), "Failed to load capture", kMB_OK);
+      }
 
       // Close the browser once a capture lands: the user asked for one, they
       // got it, and leaving the panel covering the rig hides the thing they

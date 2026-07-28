@@ -25,11 +25,15 @@ constexpr size_t kNumChannelsInternal = 1;
 
 // Capture slots in the chain. Each is a full network evaluation per sample, so
 // four is both a heavy load and enough for pedal into amp into a second stage.
-/// Three typed slots -- pedal, amp, cab -- rather than four interchangeable
-/// ones. Four said nothing about what belonged where; three named stages read
-/// as a signal path, and the type seeds the browser's gear filter so each slot
-/// opens the catalogue already narrowed to what can go in it.
-constexpr size_t kNumSlots = 3;
+/// Two capture slots -- pedal and amp -- plus the cabinet IR, which is not a
+/// capture slot and lives outside this count.
+///
+/// There was a cab slot. TONE3000 has almost no NAM cab captures, because a
+/// cabinet is captured as an impulse response, so the card asked for something
+/// the library does not have. The IR card already covers cabinets properly.
+/// Full-rig captures that include a cab are reachable from the amp slot, which
+/// asks for amp-cab as well as amp.
+constexpr size_t kNumSlots = 2;
 
 // Capacity of each slot's bypass delay line, allocated once so ProcessBlock
 // never allocates. Resampling latency is a few hundred samples at most.
@@ -67,7 +71,6 @@ enum EParams
   // through a matching delay, so the reported latency does not move.
   kSlot1Active,
   kSlot2Active,
-  kSlot3Active,
   kNumParams
 };
 
