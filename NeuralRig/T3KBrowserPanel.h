@@ -227,6 +227,12 @@ public:
       if (mAwaitingChoicesForRow >= 0 && mSnapshot.modelChoicesRow == mAwaitingChoicesForRow
           && !mSnapshot.modelChoices.empty())
       {
+        // Disarm as the menu opens, not when something is chosen. Clearing it
+        // on selection meant dismissing the menu left the request armed, and
+        // the next state change -- switching tabs, a search landing -- saw the
+        // same condition still true and reopened it.
+        mChoiceRow = mAwaitingChoicesForRow;
+        mAwaitingChoicesForRow = -1;
         ShowModelMenu();
       }
     }
@@ -264,6 +270,12 @@ public:
     {
       if (mTabRects[i].Contains(x, y))
       {
+        // Whatever variant request was in flight belongs to a row that is about
+        // to be replaced -- and the menu it opened is still on screen. Now that
+        // menus are drawn by IGraphics rather than the OS, clicking a tab does
+        // not dismiss one: the click goes to the tab, and the menu simply stays
+        // up over the new results. It has to be collapsed explicitly.
+        DismissMenus();
         mScrollOffset = 0.f;
         mController.ShowTab(static_cast<Tab>(i));
         SetDirty(false);
@@ -393,8 +405,8 @@ public:
 
     if (valIdx == kModelValIdx)
     {
-      const int row = mAwaitingChoicesForRow;
-      mAwaitingChoicesForRow = -1;
+      const int row = mChoiceRow;
+      mChoiceRow = -1;
 
       if (chosen < 0 || chosen >= static_cast<int>(mSnapshot.modelChoices.size()) || row < 0
           || row >= static_cast<int>(mSnapshot.rows.size()))
@@ -509,6 +521,8 @@ private:
 
   void RunSearch(int page)
   {
+    DismissMenus();
+
     // Search sets the Browse tab itself. Calling ShowTab first would route back
     // into a search with the previous query, claim the one allowed in-flight
     // operation, and get this one dropped.
@@ -530,6 +544,7 @@ private:
 
   void ShowGearMenu()
   {
+    ReadyMenus();
     mGearMenu.Clear();
 
     for (const auto& filter : GearFilters())
@@ -540,6 +555,7 @@ private:
 
   void ShowArchitectureMenu()
   {
+    ReadyMenus();
     mArchMenu.Clear();
 
     for (const auto& architecture : ArchitectureFilters())
@@ -548,8 +564,33 @@ private:
     GetUI()->CreatePopupMenu(*this, mArchMenu, mArchRect, kArchValIdx);
   }
 
+  /// Collapses any open popup menu. Needed wherever the panel changes what it
+  /// is showing underneath one.
+  void DismissMenus()
+  {
+    mAwaitingChoicesForRow = -1;
+    mChoiceRow = -1;
+
+    // Hide rather than CollapseEverything, which is private. CreatePopupMenu
+    // shows the control again on the next open, so hiding is enough to get it
+    // off screen without leaving it unusable.
+    if (auto* ui = GetUI())
+      if (auto* menu = ui->GetPopupMenuControl())
+        menu->Hide(true);
+  }
+
+  /// Un-hides the shared menu control before opening anything on it, since
+  /// DismissMenus hides it.
+  void ReadyMenus()
+  {
+    if (auto* ui = GetUI())
+      if (auto* menu = ui->GetPopupMenuControl())
+        menu->Hide(false);
+  }
+
   void ShowModelMenu()
   {
+    ReadyMenus();
     mModelMenu.Clear();
 
     for (const auto& choice : mSnapshot.modelChoices)
@@ -564,7 +605,7 @@ private:
       mModelMenu.AddItem(label.c_str());
     }
 
-    GetUI()->CreatePopupMenu(*this, mModelMenu, mListRect.GetFromTop(1.f).GetVShifted(RowTop(mAwaitingChoicesForRow)),
+    GetUI()->CreatePopupMenu(*this, mModelMenu, mListRect.GetFromTop(1.f).GetVShifted(RowTop(mChoiceRow)),
                              kModelValIdx);
   }
 
@@ -572,6 +613,7 @@ private:
 
   void ShowSortMenu()
   {
+    ReadyMenus();
     mSortMenu.Clear();
 
     for (const auto& sort : nr::net::SortOptions())
@@ -835,7 +877,8 @@ private:
   IPopupMenu mModelMenu;
 
   bool mStarted = false;
-  int mAwaitingChoicesForRow = -1;
+  int mAwaitingChoicesForRow = -1; ///< a variant fetch is in flight for this row
+  int mChoiceRow = -1;             ///< the row whose menu is currently open
   ChoiceHandler mOnChoice;
   float mScrollOffset = 0.f;
   int mHoverRow = -1;
