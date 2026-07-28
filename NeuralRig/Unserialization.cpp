@@ -127,6 +127,34 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
   return pos;
 }
 
+/// The reader for states this plugin writes.
+///
+/// The names come from the live parameter list rather than a literal, which is
+/// the whole point. Every earlier reader here carries a hardcoded vector that
+/// has to match the enum exactly and in order, and keeping those two in step by
+/// hand is what broke presets four separate times -- most recently when the
+/// list stopped at "Slim" while the enum grew a dozen per-stage controls, so
+/// they were written on save and silently ignored on load.
+///
+/// SerializeParams writes GetParam(i) for i in [0, kNumParams), so asking the
+/// parameters for their own names cannot drift from what was written. Adding a
+/// parameter now needs no change here at all.
+///
+/// The legacy readers below keep their literals: they describe formats written
+/// by *older builds*, whose parameter lists are history and must not follow
+/// this one as it changes.
+int _GetConfigCurrent(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config,
+                      const iplug::IPluginBase& plugin)
+{
+  std::vector<std::string> paramNames;
+  paramNames.reserve(static_cast<size_t>(plugin.NParams()));
+
+  for (int i = 0; i < plugin.NParams(); i++)
+    paramNames.push_back(plugin.GetParam(i)->GetName());
+
+  return _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+}
+
 void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string> newNames)
 {
   // Assumes no aliasing!
@@ -365,7 +393,7 @@ int NeuralRig::_UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk,
     // The version is the wrong thing to test. The header is the guarantee: a
     // chunk carrying ###NeuralRig### was written by this plugin, in the format
     // SerializeState writes today, whatever its version string says.
-    pos = _GetConfigFrom_0_7_14(chunk, pos, config);
+    pos = _GetConfigCurrent(chunk, pos, config, *this);
   }
   _UnserializeApplyConfig(config);
   return pos;
