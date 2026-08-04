@@ -1,6 +1,8 @@
 #include <algorithm> // std::clamp, std::min
 #include <cmath> // pow
 #include <filesystem>
+#include <fstream>
+#include <cstring>
 #include <iostream>
 #include <utility>
 
@@ -21,6 +23,7 @@
 #include "StatusBar.h"
 #include "T3KBrowserPanel.h"
 #include "Theme.h"
+#include "WavCompat.h"
 #include "WindowChrome.h"
 
 using namespace iplug;
@@ -468,7 +471,7 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         else if (extension == ".nam" && slotIndex < static_cast<int>(kNumSlots))
         {
           std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-          mPendingLoads.emplace_back(slotIndex, std::string(path));
+          mPendingLoads.push_back({slotIndex, std::string(path), {}});
         }
       };
 
@@ -585,18 +588,20 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
           if (!row.localPath.empty())
           {
             std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-            mPendingLoads.emplace_back(slot, row.localPath);
+            mPendingLoads.push_back({slot, row.localPath, row.title});
             return;
           }
 
-          mBrowser.DownloadRow(rowIndex, [this, slot](bool success, std::string pathOrError) {
+          const std::string title = row.title;
+
+          mBrowser.DownloadRow(rowIndex, [this, slot, title](bool success, std::string pathOrError) {
             if (!success)
               return;
 
             // Called from a worker thread. Park the path and let OnIdle stage
             // it on the message thread rather than touching model state here.
             std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-            mPendingLoads.emplace_back(slot, pathOrError);
+            mPendingLoads.push_back({slot, pathOrError, title});
           });
         });
 
@@ -606,12 +611,17 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
         [this](const nr::net::BrowserController::ModelChoice& choice, const nr::net::BrowserController::Row& row) {
           const int slot = mBrowserTargetSlot;
 
-          mBrowser.DownloadChoice(choice, row.title, [this, slot](bool success, std::string pathOrError) {
+          // The variant's own name qualifies the tone: "Marshall JCM-800"
+          // alone does not say which of its forty models is loaded.
+          const std::string label =
+            choice.name.empty() ? row.title : row.title + " - " + choice.name;
+
+          mBrowser.DownloadChoice(choice, row.title, [this, slot, label](bool success, std::string pathOrError) {
             if (!success)
               return;
 
             std::lock_guard<std::mutex> lock(mPendingLoadMutex);
-            mPendingLoads.emplace_back(slot, pathOrError);
+            mPendingLoads.push_back({slot, pathOrError, label});
           });
         });
 
@@ -921,6 +931,45 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
   _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
 }
 
+namespace
+{
+/// Turns a cache filename back into something readable.
+///
+/// Downloads are stored as a slug with the model id appended --
+/// "marshall-jcm-800-ampete-one-mars-gain-6-679222". That is what the card
+/// showed for every capture. This is only a fallback: a capture loaded in this
+/// session carries its real API title, and this is for the ones that do not,
+/// such as a reopened session or a file dropped from disk.
+std::string PrettifyCaptureName(const std::string& stem)
+{
+  std::string text = stem;
+
+  // Drop a trailing "-123456" id, but only if it really is all digits.
+  const auto dash = text.find_last_of('-');
+
+  if (dash != std::string::npos && dash + 1 < text.size()
+      && text.find_first_not_of("0123456789", dash + 1) == std::string::npos)
+    text.erase(dash);
+
+  std::replace(text.begin(), text.end(), '-', ' ');
+  std::replace(text.begin(), text.end(), '_', ' ');
+
+  // Capitalise word starts. Leaves acronyms looking odd, but reads far better
+  // than an unbroken slug.
+  bool atWordStart = true;
+
+  for (auto& c : text)
+  {
+    if (atWordStart && std::isalpha(static_cast<unsigned char>(c)))
+      c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+
+    atWordStart = c == ' ';
+  }
+
+  return text;
+}
+} // namespace
+
 void NeuralRig::OnIdle()
 {
   // Apply a requested preset here, where no control is mid-callback.
@@ -1032,13 +1081,13 @@ void NeuralRig::OnIdle()
   // because the download completes on a worker and staging touches state the
   // audio thread reads.
   {
-    std::vector<std::pair<int, std::string>> pending;
+    std::vector<PendingLoad> pending;
     {
       std::lock_guard<std::mutex> lock(mPendingLoadMutex);
       pending.swap(mPendingLoads);
     }
 
-    for (const auto& [slot, path] : pending)
+    for (const auto& [slot, path, title] : pending)
     {
       WDL_String filePath;
       filePath.Set(path.c_str());
@@ -1055,6 +1104,7 @@ void NeuralRig::OnIdle()
 
       if (extension == ".wav" || isIRTarget)
       {
+        mIRTitle = title;
         _LoadIRWithFeedback(filePath);
       }
       else if (slot >= 0)
@@ -1063,6 +1113,9 @@ void NeuralRig::OnIdle()
         // discarded -- so a capture that would not load did nothing at all, with
         // no message anywhere. An invisible failure is indistinguishable from a
         // broken download or a broken filter, which is exactly how it looked.
+        if (slot < static_cast<int>(kNumSlots))
+          mSlotTitles[static_cast<size_t>(slot)] = title;
+
         const std::string message = _StageModel(static_cast<size_t>(slot), filePath);
 
         if (!message.empty())
@@ -1107,7 +1160,10 @@ void NeuralRig::OnIdle()
         {
           // Show the file's stem: the full path is meaningless in a card this
           // size, and the stem is what the capture is actually called.
-          name = std::filesystem::path(mNAMPaths[slot].Get()).stem().string();
+          // The API title when we have it; otherwise unpick the filename.
+          name = !mSlotTitles[slot].empty()
+                   ? mSlotTitles[slot]
+                   : PrettifyCaptureName(std::filesystem::path(mNAMPaths[slot].Get()).stem().string());
         }
 
         static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureNameAndCollapse(name.c_str());
@@ -1125,7 +1181,12 @@ void NeuralRig::OnIdle()
 
         if (auto* card = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
         {
-          const std::string name = occupied ? std::filesystem::path(mIRPath.Get()).stem().string() : std::string{};
+          std::string name;
+
+          if (occupied)
+            name = !mIRTitle.empty()
+                     ? mIRTitle
+                     : PrettifyCaptureName(std::filesystem::path(mIRPath.Get()).stem().string());
           static_cast<nr::rig::RigSlotControl*>(card)->SetCaptureNameAndCollapse(name.c_str());
         }
       }
@@ -1603,8 +1664,14 @@ dsp::wav::LoadReturnCode NeuralRig::_StageIR(const WDL_String& irPath)
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
   try
   {
+    // Some valid IRs need their header relaxed before the loader will take
+    // them. That has to happen here rather than at the call sites: an IR
+    // arrives by drop, by browser, by file picker and by preset restore, and
+    // normalising at only some of those means a file loads or not depending on
+    // how you reached for it.
     auto irPathU8 = std::filesystem::u8path(irPath.Get());
-    mStagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
+    const std::string loadable = nr::wavcompat::MakeLoadable(irPathU8.string());
+    mStagedIR = std::make_unique<dsp::ImpulseResponse>(loadable.c_str(), sampleRate);
     wavState = mStagedIR->GetWavState();
   }
   catch (std::runtime_error& e)
