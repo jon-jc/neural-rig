@@ -177,8 +177,11 @@ public:
 
     if (loaded)
     {
+      // Ellipsised rather than clipped. Capture names are long and a hard clip
+      // mid-word reads as a rendering fault; an ellipsis reads as a name that
+      // continues.
       const IText title(17.f, PluginColors::INK, nullptr, EAlign::Near, EVAlign::Middle);
-      g.DrawText(title, mCaptureName.c_str(), mTitleRect);
+      g.DrawText(title, Ellipsised(g, mCaptureName, title, mTitleRect.W()).c_str(), mTitleRect);
 
       DrawClear(g, accent);
       DrawPower(g, accent, on);
@@ -257,6 +260,30 @@ private:
     mTitleRect = inner.GetFromTop(50.f).GetReducedFromTop(22.f);
     mSubtitleRect = inner.GetFromTop(72.f).GetReducedFromTop(50.f);
     mPowerRect = inner.GetFromTop(18.f).GetFromRight(26.f).GetHShifted(-24.f);
+  }
+
+  /// Trims text to fit a width, ending in a single-character ellipsis.
+  static std::string Ellipsised(IGraphics& g, const std::string& text, const IText& style, float maxWidth)
+  {
+    IRECT measured;
+    g.MeasureText(style, text.c_str(), measured);
+
+    if (measured.W() <= maxWidth)
+      return text;
+
+    std::string trimmed = text;
+
+    while (trimmed.size() > 1)
+    {
+      trimmed.pop_back();
+      const std::string candidate = trimmed + "…";
+      g.MeasureText(style, candidate.c_str(), measured);
+
+      if (measured.W() <= maxWidth)
+        return candidate;
+    }
+
+    return trimmed;
   }
 
   void DrawClear(IGraphics& g, const IColor& accent)

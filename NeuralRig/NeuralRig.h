@@ -527,7 +527,25 @@ private:
   // audio thread reads, so the path is parked here and picked up on the message
   // thread in OnIdle instead.
   std::mutex mPendingLoadMutex;
-  std::vector<std::pair<int, std::string>> mPendingLoads;
+  /// A file waiting to be staged, with the display name it should carry.
+  ///
+  /// The title comes from the API and is what the card shows. Without it the
+  /// card falls back to the cache filename, which is a slug with a numeric id
+  /// on the end -- readable, but not what the capture is called.
+  struct PendingLoad
+  {
+    int slot = 0;
+    std::string path;
+    std::string title; ///< empty for drops and local files, which have no API record
+  };
+
+  std::vector<PendingLoad> mPendingLoads;
+
+  /// Display names per stage, held in memory only. A reloaded session falls
+  /// back to prettifying the filename rather than carrying titles through
+  /// serialization, which is a format change for a cosmetic gain.
+  std::string mSlotTitles[kNumSlots];
+  std::string mIRTitle;
 
   // Last-known slot occupancy, so the chain connector is only redrawn when a
   // slot is actually filled or emptied rather than every idle tick.
