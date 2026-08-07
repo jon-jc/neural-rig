@@ -388,7 +388,13 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
     // Attached after the backdrop so it is above it, but before the header's
     // own controls so those take their clicks first and only bare header space
     // starts a drag.
+    //
+    // Not on iOS: there is no window to drag. A control that swallows drags
+    // across the whole header would only eat touches that should reach what is
+    // underneath.
+#if !defined(OS_IOS)
     pGraphics->AttachControl(new nr::shell::WindowDragControl(headerArea));
+#endif
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURALRIG", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
@@ -641,16 +647,27 @@ NeuralRig::NeuralRig(const InstanceInfo& info)
 
       // Replace the caption-bar buttons that went with the OS frame. Inert in
       // plugin builds, where the host owns the window.
+      //
+      // None of this belongs on iOS. An app is never closed by a button in its
+      // own UI -- the system owns that -- and there is no menu bar to stand in
+      // for, so a Close button that does nothing and File/Options menus that
+      // open nothing would just be three dead controls in the header.
+#if !defined(OS_IOS)
       pGraphics->AttachControl(new nr::shell::WindowButtonControl(closeButtonArea, nr::shell::WindowButton::Close));
 
       pGraphics->AttachControl(new nr::shell::WindowMenuControl(fileMenuArea, "File", true));
       pGraphics->AttachControl(new nr::shell::WindowMenuControl(optionsMenuArea, "Options", false));
+#endif
 
+      // Nothing to request on iOS: mBrowserOpen already starts true there, so
+      // the panel is attached visible and the canvas never changes size.
+#if !defined(OS_IOS)
       // The browser starts closed, so the window should start collapsed.
       // Requested rather than done here: the graphics context is still being
       // built inside the layout function.
       if (!mBrowserOpen)
         mPendingResizeHeight = mCollapsedHeight;
+#endif
 
 
       // Presets save the whole rig, so they go through the plugin's own
@@ -1047,6 +1064,17 @@ void NeuralRig::OnIdle()
       if (auto* panel = pGraphics->GetControlWithTag(kCtrlTagT3KBrowser))
         panel->Hide(!mBrowserOpen);
 
+#if defined(OS_IOS)
+      // No window to resize. The canvas is the device screen, scaled to it
+      // once, so the browser reveals and hides in place -- it behaves as a
+      // sheet over the lower half rather than something the window grows to
+      // accommodate. Resizing here would fight the host view instead.
+      //
+      // Centring and keeping-on-screen are equally meaningless: the app is
+      // always exactly where the system puts it.
+      (void)height;
+      pGraphics->SetAllControlsDirty();
+#else
       pGraphics->Resize(PLUG_WIDTH, height, pGraphics->GetDrawScale());
       pGraphics->SetAllControlsDirty();
 
@@ -1063,6 +1091,7 @@ void NeuralRig::OnIdle()
         // so make sure the part that just appeared is actually on screen.
         nr::shell::KeepOnScreen(pGraphics);
       }
+#endif
     }
 
     return;
