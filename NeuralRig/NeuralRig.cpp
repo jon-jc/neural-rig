@@ -25,6 +25,7 @@
 #include "Theme.h"
 #include "WavCompat.h"
 #include "WindowChrome.h"
+#include "net/Platform.h" // UserDataDirectory, for portable capture paths
 
 using namespace iplug;
 using namespace igraphics;
@@ -950,6 +951,64 @@ void NeuralRig::_LoadIRWithFeedback(const WDL_String& irPath)
 
 namespace
 {
+/// Marks a stored path as being relative to our own data directory.
+///
+/// Presets and host state carry the paths of the captures they loaded, and that
+/// directory's absolute location is not stable. On iOS the shared App Group
+/// container path contains an install-specific identifier, so a preset written
+/// before a reinstall would point at a directory that no longer exists -- the
+/// rig would come back empty with no indication why. Storing paths inside it
+/// relative to it survives that, and makes a preset portable between machines
+/// into the bargain.
+///
+/// The token cannot occur in a real path, so state written before this existed,
+/// holding absolute paths, still loads unchanged. The chunk layout is untouched
+/// -- same strings in the same order -- so no state version bump is needed.
+constexpr const char* kDataDirectoryToken = "$NRDATA$/";
+
+/// Rewrites a path for storage, relative to the data directory if it is inside
+/// it. Paths outside -- a file from the user's own library -- are stored as they
+/// are, since there is nothing to anchor them to.
+std::string ToPortablePath(const std::string& path)
+{
+  const std::string dataDir = nr::net::UserDataDirectory();
+
+  if (dataDir.empty() || path.size() <= dataDir.size() || path.compare(0, dataDir.size(), dataDir) != 0)
+    return path;
+
+  // A prefix match is not enough: a sibling directory whose name merely starts
+  // with ours -- NeuralRigBackup beside NeuralRig -- would otherwise be rewritten
+  // to a relative path that resolves back inside our own directory, silently
+  // pointing at a different file. The next character has to be a separator.
+  const char boundary = path[dataDir.size()];
+
+  if (boundary != '/' && boundary != '\\')
+    return path;
+
+  std::string relative = path.substr(dataDir.size() + 1);
+
+  // Forward slashes, so a preset written on Windows resolves on iOS.
+  std::replace(relative.begin(), relative.end(), '\\', '/');
+
+  return std::string(kDataDirectoryToken) + relative;
+}
+
+/// The inverse, re-anchoring against wherever the data directory is now.
+std::string FromPortablePath(const std::string& stored)
+{
+  const std::string token = kDataDirectoryToken;
+
+  if (stored.rfind(token, 0) != 0)
+    return stored;
+
+  const std::string dataDir = nr::net::UserDataDirectory();
+
+  if (dataDir.empty())
+    return {};
+
+  return (std::filesystem::path(dataDir) / stored.substr(token.size())).make_preferred().string();
+}
+
 /// Turns a cache filename back into something readable.
 ///
 /// Downloads are stored as a slug with the model id appended --
@@ -1278,8 +1337,8 @@ bool NeuralRig::SerializeState(IByteChunk& chunk) const
   // One path per capture slot, in chain order, so a reopened session comes
   // back with the same rig rather than just the first amp.
   for (size_t slot = 0; slot < kNumSlots; slot++)
-    chunk.PutStr(mNAMPaths[slot].Get());
-  chunk.PutStr(mIRPath.Get());
+    chunk.PutStr(ToPortablePath(mNAMPaths[slot].Get()).c_str());
+  chunk.PutStr(ToPortablePath(mIRPath.Get()).c_str());
   return SerializeParams(chunk);
 }
 
