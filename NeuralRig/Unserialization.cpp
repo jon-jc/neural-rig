@@ -60,9 +60,14 @@ void NeuralRig::_UnserializeApplyConfig(nlohmann::json& config)
   // that null to std::string throws type_error.302 -- so a state without these
   // keys did not restore without a path, it threw out of the restore entirely.
   // That is the exception preset loading was dying on.
+  // Re-anchors paths stored relative to the data directory. Applied here rather
+  // than at each caller so every path read goes through it -- both slot keys,
+  // the legacy single-path key and the IR.
   const auto pathFrom = [&config](const char* key) {
     const auto it = config.find(key);
-    return it != config.end() && it->is_string() ? it->get<std::string>() : std::string{};
+    const auto stored = it != config.end() && it->is_string() ? it->get<std::string>() : std::string{};
+
+    return stored.empty() ? stored : FromPortablePath(stored);
   };
 
   // Every slot, not just the first. Restoring only slot 0 left the rest of the
