@@ -162,7 +162,7 @@ public:
   /// Waits for TONE3000 to redirect to the loopback listener with a chosen
   /// tone, then downloads it. Used by the embedded browser: the user does the
   /// browsing on tone3000.com itself and this picks up the result.
-  void AwaitToneSelection(LoopbackServer& loopback,
+  void AwaitToneSelection(RedirectListener& loopback,
                           const PkcePair& pkce,
                           const std::string& redirectUri,
                           int timeoutMs,
@@ -178,7 +178,7 @@ public:
 
   /// Handles a single redirect from the embedded browser. Called in a loop by
   /// AwaitToneSelection so one pick is not the end of the session.
-  void HandleOneSelection(LoopbackServer& loopback,
+  void HandleOneSelection(RedirectListener& loopback,
                           const PkcePair& pkce,
                           const std::string& redirectUri,
                           int timeoutMs,
@@ -213,7 +213,7 @@ private:
   void MarkDirty();
 
   Tone3000Client mClient;
-  LoopbackServer mLoopback;
+  RedirectListener mLoopback;
 
   mutable std::mutex mMutex;
   Snapshot mSnapshot;
