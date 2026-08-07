@@ -495,7 +495,18 @@ private:
 
   /// Whether the browser is open. Held here rather than in the control because
   /// resizing re-runs the layout function, which rebuilds every control.
+  ///
+  /// Starts open on iOS. There the canvas is a fixed slice of the device
+  /// screen, so closing the browser buys back no space and only leaves the
+  /// lower half empty; an iPad has room for the catalogue, and having it in
+  /// reach is the point. Set here rather than in the layout function so the
+  /// toggle and the panel are both built from the same value -- flipping it
+  /// mid-layout left the toggle drawn closed over an open panel.
+#if defined(OS_IOS)
+  bool mBrowserOpen = true;
+#else
   bool mBrowserOpen = false;
+#endif
 
   /// Window height with the browser closed: the bottom of the status strip,
   /// measured by the layout rather than guessed. The browser is the last thing
