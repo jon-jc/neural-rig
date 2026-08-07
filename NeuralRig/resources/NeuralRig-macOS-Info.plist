@@ -11,7 +11,7 @@
 	<key>CFBundleIconFile</key>
 	<string>NeuralRig.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.StevenAtkinson.app.NeuralRig</string>
+	<string>com.jonjc.app.NeuralRig</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

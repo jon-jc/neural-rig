@@ -63,6 +63,28 @@ NSMutableDictionary* KeychainQuery(const std::string& key)
   query[(__bridge id)kSecClass] = (__bridge id)kSecClassGenericPassword;
   query[(__bridge id)kSecAttrService] = kKeychainService;
   query[(__bridge id)kSecAttrAccount] = ToNSString(key);
+
+  #if TARGET_OS_IPHONE
+  // The app and the AUv3 extension have separate keychains unless they name a
+  // shared access group. Without this the user would sign in inside the app and
+  // the plugin would still consider itself signed out, since only the app can
+  // present sign-in -- so the extension would have no way to become authorised
+  // at all.
+  //
+  // The access group is deliberately not named here. A shared group has to
+  // carry the team ID as a prefix, and that is only known at build time --
+  // $(AppIdentifierPrefix) is substituted into the entitlement, not into
+  // source, so writing it in a literal would send the string through verbatim
+  // and fail to match anything. Leaving kSecAttrAccessGroup unset makes the
+  // item land in the first group listed in keychain-access-groups, so the
+  // entitlement puts the shared group first and both processes agree without
+  // either of them hardcoding a team ID.
+
+  // Reachable when the device is locked, so a rig can keep loading captures
+  // while the iPad sits locked on a stand mid-session.
+  query[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlock;
+  #endif
+
   return query;
 }
 } // namespace
@@ -71,6 +93,32 @@ std::string UserDataDirectory()
 {
   @autoreleasepool
   {
+  #if TARGET_OS_IPHONE
+    // An app extension gets its own container, so a capture downloaded in the
+    // app would be invisible to the AUv3 plugin -- the user would sign in,
+    // build a rig, open their DAW and find an empty cache. The App Group
+    // container is the one directory both can see.
+    //
+    // Must match com.apple.security.application-groups in the entitlements,
+    // and the group has to be registered on the Apple Developer account and
+    // enabled for both the app and the extension.
+    NSURL* shared = [[NSFileManager defaultManager]
+      containerURLForSecurityApplicationGroupIdentifier:@"group.com.jonjc.NeuralRig"];
+
+    if (shared != nil)
+    {
+      NSURL* sharedDirectory = [shared URLByAppendingPathComponent:@"NeuralRig"];
+      const std::string sharedPath = sharedDirectory.path.UTF8String;
+
+      if (EnsureDirectory(sharedPath))
+        return sharedPath;
+    }
+
+    // Deliberately falls through rather than failing. If the group is not
+    // provisioned the standalone app should still work on its own, with a
+    // private cache, instead of refusing to store anything at all.
+  #endif
+
     NSArray<NSURL*>* urls = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
                                                                    inDomains:NSUserDomainMask];
     if (urls.count == 0)
