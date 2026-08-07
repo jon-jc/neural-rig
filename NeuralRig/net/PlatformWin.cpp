@@ -148,6 +148,13 @@ bool OpenUrlInBrowser(const std::string& url)
   return (INT_PTR)result > 32;
 }
 
+void SetUrlOpener(std::function<bool(const std::string& url)>)
+{
+  // Nothing to install. Windows can open a URL from anywhere, so
+  // OpenUrlInBrowser above is always able to do the work itself. The hook
+  // exists for iOS, where only the containing app may open a URL.
+}
+
 HttpResponse HttpRequest(const std::string& method,
                          const std::string& url,
                          const std::vector<Header>& headers,

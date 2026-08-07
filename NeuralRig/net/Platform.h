@@ -65,7 +65,24 @@ HttpResponse HttpRequest(const std::string& method,
 
 /// Opens a URL in the user's default browser. Used to start the OAuth flow so
 /// the plugin never handles the user's password.
+///
+/// On iOS this cannot be implemented here. The shared code is compiled into a
+/// framework that the AUv3 extension links, so it is built extension-safe, and
+/// UIApplication.sharedApplication is unavailable to app extensions -- merely
+/// referencing it fails the build. The containing app installs an opener with
+/// SetUrlOpener below; an extension installs none and this returns false.
 bool OpenUrlInBrowser(const std::string& url);
+
+/// Installs the function OpenUrlInBrowser delegates to. Only iOS needs this:
+/// Windows and macOS can open a URL from anywhere, so their implementations
+/// ignore whatever is set here.
+///
+/// This is a deliberate inversion. Opening a URL is a capability only the
+/// containing app has, so the app supplies it rather than the shared layer
+/// reaching for an API it is not allowed to touch. It also reflects how OAuth
+/// has to work on iOS: the user signs in inside the app, and the AUv3
+/// extension reads the resulting token from the shared keychain.
+void SetUrlOpener(std::function<bool(const std::string& url)> opener);
 
 /**
     Credentials at rest, in the OS store rather than a file we own.

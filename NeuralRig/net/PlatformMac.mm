@@ -25,7 +25,20 @@ NSString* ToNSString(const std::string& text)
 {
   return [NSString stringWithUTF8String:text.c_str()];
 }
+
+/// Set once by the containing app before any sign-in can be attempted, and
+/// read on whichever thread starts the OAuth flow. Unset in an app extension.
+std::function<bool(const std::string&)>& UrlOpenerSlot()
+{
+  static std::function<bool(const std::string&)> slot;
+  return slot;
+}
 } // namespace
+
+void SetUrlOpener(std::function<bool(const std::string& url)> opener)
+{
+  UrlOpenerSlot() = std::move(opener);
+}
 
 void Sha256(const void* data, size_t numBytes, uint8_t digest[32])
 {
@@ -128,8 +141,15 @@ bool OpenUrlInBrowser(const std::string& url)
   #if TARGET_OS_OSX
     return [[NSWorkspace sharedWorkspace] openURL:nsUrl] == YES;
   #else
-    [[UIApplication sharedApplication] openURL:nsUrl options:@{} completionHandler:nil];
-    return true;
+    // Deliberately not UIApplication.sharedApplication. This file compiles into
+    // a framework the AUv3 extension links, so it is built extension-safe, and
+    // that API is unavailable to app extensions -- naming it at all is a build
+    // error, not a runtime one. The containing app installs an opener instead.
+    (void)nsUrl;
+    if (const auto& opener = UrlOpenerSlot())
+      return opener(url);
+
+    return false;
   #endif
   }
 }
