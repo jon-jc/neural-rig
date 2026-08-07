@@ -98,3 +98,47 @@ jobs:
           name: NeuralRig-macOS
           path: NeuralRig/build-mac/**
           if-no-files-found: warn
+
+  # iOS is a separate job rather than a matrix row: it also runs on a macOS
+  # runner, so `runner.os` cannot distinguish it from the macOS build above.
+  #
+  # This builds for the simulator with signing disabled. That compiles every
+  # source file and links both the app and the AUv3 extension without needing
+  # certificates in CI, which is the point -- the iOS project is developed on
+  # Windows, where no Xcode exists, so this job is the only thing that can tell
+  # us whether the iOS target actually builds.
+  ios:
+    name: iOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # The iOS build uses NanoVG over Metal, both vendored in iPlug2, so it
+      # needs neither the VST3 SDK nor the prebuilt Skia libraries.
+      - name: List iOS schemes
+        run: xcodebuild -project projects/NeuralRig-iOS.xcodeproj -list
+        working-directory: NeuralRig
+        shell: bash
+
+      - name: Build iOS app with AUv3
+        run: |
+          xcodebuild -project projects/NeuralRig-iOS.xcodeproj \
+            -scheme "iOS-APP with AUv3" \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        working-directory: NeuralRig
+        shell: bash

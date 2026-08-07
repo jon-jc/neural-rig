@@ -21,6 +21,8 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		030A4C038B7A9103ED67E401 /* Tone3000Client.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9A624D848E3866FF9DD828DA /* Tone3000Client.cpp */; };
+		417D4DBDB507F76181C211E2 /* PlatformCommon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 62ED4BF6933269E639B76B9B /* PlatformCommon.cpp */; };
 		4F10E7C020B17EDB00F5B09B /* NeuralRig-iOS-MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4F10E7BF20B17EDB00F5B09B /* NeuralRig-iOS-MainInterface.storyboard */; };
 		4F1115CF2296DA95000CFCBF /* NeuralRig-iOS-MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4F10E7BF20B17EDB00F5B09B /* NeuralRig-iOS-MainInterface.storyboard */; };
 		4F3E0F6A20A0BCD900A9C2BE /* NeuralRig-iOS.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4F3E0F6720A0BC5B00A9C2BE /* NeuralRig-iOS.storyboard */; };
@@ -44,15 +46,13 @@
 		4FBDC95B29FFF143004FF203 /* convnet.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94229FFF143004FF203 /* convnet.h */; };
 		4FBDC95C29FFF143004FF203 /* lstm.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94329FFF143004FF203 /* lstm.h */; };
 		4FBDC95D29FFF143004FF203 /* convnet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94429FFF143004FF203 /* convnet.cpp */; };
-		4FBDC95E29FFF143004FF203 /* model.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94529FFF143004FF203 /* model.h */; };
+		4FBDC95E29FFF143004FF203 /* wavenet/model.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94529FFF143004FF203 /* wavenet/model.h */; };
 		4FBDC95F29FFF143004FF203 /* lstm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94629FFF143004FF203 /* lstm.cpp */; };
 		4FBDC96029FFF143004FF203 /* util.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94729FFF143004FF203 /* util.h */; };
 		4FBDC96129FFF143004FF203 /* dsp.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94829FFF143004FF203 /* dsp.h */; };
 		4FBDC96229FFF143004FF203 /* activations.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC94929FFF143004FF203 /* activations.h */; };
 		4FBDC96329FFF143004FF203 /* activations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94A29FFF143004FF203 /* activations.cpp */; };
-		4FBDC96429FFF143004FF203 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94B29FFF143004FF203 /* model.cpp */; };
-		4FBDC98029FFF143004FF203 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC97E29FFF143004FF203 /* slimmable.cpp */; };
-		4FBDC98129FFF143004FF203 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC97F29FFF143004FF203 /* container.cpp */; };
+		4FBDC96429FFF143004FF203 /* wavenet/model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94B29FFF143004FF203 /* wavenet/model.cpp */; };
 		4FBDC96529FFF143004FF203 /* get_dsp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC94C29FFF143004FF203 /* get_dsp.cpp */; };
 		4FBDC97729FFF143004FF203 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC97029FFF143004FF203 /* conv1d.cpp */; };
 		4FBDC97829FFF143004FF203 /* conv1d.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC97129FFF143004FF203 /* conv1d.h */; };
@@ -61,6 +61,8 @@
 		4FBDC97B29FFF143004FF203 /* film.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC97429FFF143004FF203 /* film.h */; };
 		4FBDC97C29FFF143004FF203 /* gating_activations.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC97529FFF143004FF203 /* gating_activations.h */; };
 		4FBDC97D29FFF143004FF203 /* registry.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FBDC97629FFF143004FF203 /* registry.h */; };
+		4FBDC98029FFF143004FF203 /* wavenet/slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC97E29FFF143004FF203 /* wavenet/slimmable.cpp */; };
+		4FBDC98129FFF143004FF203 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FBDC97F29FFF143004FF203 /* container.cpp */; };
 		4FC69835293BA47F0076EC33 /* NeuralRigAU.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FC6982F293BA47F0076EC33 /* NeuralRigAU.framework */; };
 		4FC69836293BA47F0076EC33 /* NeuralRigAU.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4FC6982F293BA47F0076EC33 /* NeuralRigAU.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		4FC6983A293BA4F10076EC33 /* NeuralRigAU.h in Headers */ = {isa = PBXBuildFile; fileRef = 4FA61F7B22E89A5900A92C58 /* NeuralRigAU.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -92,6 +94,9 @@
 		4FDF6D7F2267CEBA0007B686 /* IPlugAUPlayer.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FDF6D7D2267CEBA0007B686 /* IPlugAUPlayer.mm */; };
 		4FE0DEE829A183B700DDBCC8 /* NeuralRigAU.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FC6982F293BA47F0076EC33 /* NeuralRigAU.framework */; };
 		4FE0DEF029A2E0F100DDBCC8 /* IPlugAUViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FFF105A20A0E57100D3092F /* IPlugAUViewController.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
+		58544C73A77C738E96983213 /* BrowserController.cpp in Sources */ = {isa = PBXBuildFile; fileRef = DB51415EA20D6C18B6F9F04C /* BrowserController.cpp */; };
+		619B4DD09E5A0D8B089254D2 /* PlatformMac.mm in Sources */ = {isa = PBXBuildFile; fileRef = A28845CBB20F6794A3C48B0D /* PlatformMac.mm */; };
+		7ECA42319D465C0F83BD93C9 /* LoopbackServer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C866431986F0107FB1530FF3 /* LoopbackServer.cpp */; };
 		91236D811B08F59300734C5E /* NeuralRigAppExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 91236D771B08F59300734C5E /* NeuralRigAppExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA341E2B2B9E5A650069C260 /* ToneStack.h in Headers */ = {isa = PBXBuildFile; fileRef = AA341E292B9E5A650069C260 /* ToneStack.h */; };
 		AA341E2C2B9E5A650069C260 /* ToneStack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA341E2A2B9E5A650069C260 /* ToneStack.cpp */; };
@@ -102,8 +107,9 @@
 		AA7C860D2B43A42F00B5FB3A /* wdltypes.h in Headers */ = {isa = PBXBuildFile; fileRef = AA7C86082B43A42E00B5FB3A /* wdltypes.h */; };
 		AA7C860E2B43A42F00B5FB3A /* ptrlist.h in Headers */ = {isa = PBXBuildFile; fileRef = AA7C86092B43A42E00B5FB3A /* ptrlist.h */; };
 		AA7C860F2B43A42F00B5FB3A /* heapbuf.h in Headers */ = {isa = PBXBuildFile; fileRef = AA7C860A2B43A42E00B5FB3A /* heapbuf.h */; };
-		AA8CA7772A452EF500F5BEF0 /* resample.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA8CA7752A452EF500F5BEF0 /* resample.cpp */; };
 		AAB7BBB92CC4B8D6000B8B6E /* get_dsp.h in Headers */ = {isa = PBXBuildFile; fileRef = AAB7BBB82CC4B8D6000B8B6E /* get_dsp.h */; };
+		C26B42968640C6C4AA2857AC /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 07FB4D398B1880B355706E3A /* linear.cpp */; };
+		D9E04DBBB004A4A122874E25 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 650E4D1582949D410B1A757D /* a2_fast.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -156,6 +162,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		07FB4D398B1880B355706E3A /* linear.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = linear.cpp; path = linear.cpp; sourceTree = "<group>"; };
 		4F10E7BF20B17EDB00F5B09B /* NeuralRig-iOS-MainInterface.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = "NeuralRig-iOS-MainInterface.storyboard"; path = "../resources/NeuralRig-iOS-MainInterface.storyboard"; sourceTree = "<group>"; };
 		4F10E7C520B189DD00F5B09B /* NeuralRig-iOS.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = "NeuralRig-iOS.entitlements"; sourceTree = "<group>"; };
 		4F2020F620A1B2B500F22200 /* scripts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = scripts; path = ../scripts; sourceTree = "<group>"; };
@@ -289,8 +296,14 @@
 		4FBDC94229FFF143004FF203 /* convnet.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = convnet.h; sourceTree = "<group>"; };
 		4FBDC94329FFF143004FF203 /* lstm.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = lstm.h; sourceTree = "<group>"; };
 		4FBDC94429FFF143004FF203 /* convnet.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = convnet.cpp; sourceTree = "<group>"; };
-		4FBDC94529FFF143004FF203 /* model.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wavenet/model.h; sourceTree = "<group>"; };
+		4FBDC94529FFF143004FF203 /* wavenet/model.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wavenet/model.h; sourceTree = "<group>"; };
 		4FBDC94629FFF143004FF203 /* lstm.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = lstm.cpp; sourceTree = "<group>"; };
+		4FBDC94729FFF143004FF203 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
+		4FBDC94829FFF143004FF203 /* dsp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dsp.h; sourceTree = "<group>"; };
+		4FBDC94929FFF143004FF203 /* activations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = activations.h; sourceTree = "<group>"; };
+		4FBDC94A29FFF143004FF203 /* activations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = activations.cpp; sourceTree = "<group>"; };
+		4FBDC94B29FFF143004FF203 /* wavenet/model.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/model.cpp; sourceTree = "<group>"; };
+		4FBDC94C29FFF143004FF203 /* get_dsp.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = get_dsp.cpp; sourceTree = "<group>"; };
 		4FBDC97029FFF143004FF203 /* conv1d.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = conv1d.cpp; sourceTree = "<group>"; };
 		4FBDC97129FFF143004FF203 /* conv1d.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = conv1d.h; sourceTree = "<group>"; };
 		4FBDC97229FFF143004FF203 /* ring_buffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ring_buffer.cpp; sourceTree = "<group>"; };
@@ -298,14 +311,8 @@
 		4FBDC97429FFF143004FF203 /* film.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = film.h; sourceTree = "<group>"; };
 		4FBDC97529FFF143004FF203 /* gating_activations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = gating_activations.h; sourceTree = "<group>"; };
 		4FBDC97629FFF143004FF203 /* registry.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = registry.h; sourceTree = "<group>"; };
-		4FBDC94729FFF143004FF203 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
-		4FBDC94829FFF143004FF203 /* dsp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dsp.h; sourceTree = "<group>"; };
-		4FBDC94929FFF143004FF203 /* activations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = activations.h; sourceTree = "<group>"; };
-		4FBDC94A29FFF143004FF203 /* activations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = activations.cpp; sourceTree = "<group>"; };
-		4FBDC94B29FFF143004FF203 /* model.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/model.cpp; sourceTree = "<group>"; };
-		4FBDC97E29FFF143004FF203 /* slimmable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/slimmable.cpp; sourceTree = "<group>"; };
+		4FBDC97E29FFF143004FF203 /* wavenet/slimmable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/slimmable.cpp; sourceTree = "<group>"; };
 		4FBDC97F29FFF143004FF203 /* container.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = container.cpp; sourceTree = "<group>"; };
-		4FBDC94C29FFF143004FF203 /* get_dsp.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = get_dsp.cpp; sourceTree = "<group>"; };
 		4FC46E58231440C8000045E7 /* web */ = {isa = PBXFileReference; lastKnownFileType = folder; name = web; path = ../resources/web; sourceTree = "<group>"; };
 		4FC6982F293BA47F0076EC33 /* NeuralRigAU.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = NeuralRigAU.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FC82B4720BD524700722133 /* img */ = {isa = PBXFileReference; lastKnownFileType = folder; name = img; path = ../resources/img; sourceTree = "<group>"; };
@@ -362,8 +369,12 @@
 		4FFF108420A1036200D3092F /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = config.h; path = ../config.h; sourceTree = "<group>"; };
 		4FFF108720A1036200D3092F /* NeuralRig.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = NeuralRig.cpp; path = ../NeuralRig.cpp; sourceTree = "<group>"; };
 		4FFF108820A1036200D3092F /* NeuralRig.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NeuralRig.h; path = ../NeuralRig.h; sourceTree = "<group>"; };
+		62ED4BF6933269E639B76B9B /* PlatformCommon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PlatformCommon.cpp; path = ../net/PlatformCommon.cpp; sourceTree = "<group>"; };
+		650E4D1582949D410B1A757D /* a2_fast.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = a2_fast.cpp; path = wavenet/a2_fast.cpp; sourceTree = "<group>"; };
 		91236D0D1B08F42B00734C5E /* NeuralRig.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NeuralRig.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		91236D771B08F59300734C5E /* NeuralRigAppExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NeuralRigAppExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A624D848E3866FF9DD828DA /* Tone3000Client.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Tone3000Client.cpp; path = ../net/Tone3000Client.cpp; sourceTree = "<group>"; };
+		A28845CBB20F6794A3C48B0D /* PlatformMac.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PlatformMac.mm; path = ../net/PlatformMac.mm; sourceTree = "<group>"; };
 		AA341E292B9E5A650069C260 /* ToneStack.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ToneStack.h; path = ../ToneStack.h; sourceTree = "<group>"; };
 		AA341E2A2B9E5A650069C260 /* ToneStack.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ToneStack.cpp; path = ../ToneStack.cpp; sourceTree = "<group>"; };
 		AA7C86042B43A42E00B5FB3A /* ResamplingContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ResamplingContainer.h; sourceTree = "<group>"; };
@@ -371,8 +382,9 @@
 		AA7C86082B43A42E00B5FB3A /* wdltypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wdltypes.h; sourceTree = "<group>"; };
 		AA7C86092B43A42E00B5FB3A /* ptrlist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ptrlist.h; sourceTree = "<group>"; };
 		AA7C860A2B43A42E00B5FB3A /* heapbuf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = heapbuf.h; sourceTree = "<group>"; };
-		AA8CA7752A452EF500F5BEF0 /* resample.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = resample.cpp; sourceTree = "<group>"; };
 		AAB7BBB82CC4B8D6000B8B6E /* get_dsp.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = get_dsp.h; sourceTree = "<group>"; };
+		C866431986F0107FB1530FF3 /* LoopbackServer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LoopbackServer.cpp; path = ../net/LoopbackServer.cpp; sourceTree = "<group>"; };
+		DB51415EA20D6C18B6F9F04C /* BrowserController.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = BrowserController.cpp; path = ../net/BrowserController.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -688,10 +700,10 @@
 				4FBDC93F29FFF143004FF203 /* util.cpp */,
 				4FBDC94729FFF143004FF203 /* util.h */,
 				4FBDC94029FFF143004FF203 /* version.h */,
-				4FBDC94B29FFF143004FF203 /* model.cpp */,
-				4FBDC97E29FFF143004FF203 /* slimmable.cpp */,
+				4FBDC94B29FFF143004FF203 /* wavenet/model.cpp */,
+				4FBDC97E29FFF143004FF203 /* wavenet/slimmable.cpp */,
 				4FBDC97F29FFF143004FF203 /* container.cpp */,
-				4FBDC94529FFF143004FF203 /* model.h */,
+				4FBDC94529FFF143004FF203 /* wavenet/model.h */,
 				4FBDC97029FFF143004FF203 /* conv1d.cpp */,
 				4FBDC97129FFF143004FF203 /* conv1d.h */,
 				4FBDC97229FFF143004FF203 /* ring_buffer.cpp */,
@@ -699,6 +711,8 @@
 				4FBDC97429FFF143004FF203 /* film.h */,
 				4FBDC97529FFF143004FF203 /* gating_activations.h */,
 				4FBDC97629FFF143004FF203 /* registry.h */,
+				07FB4D398B1880B355706E3A /* linear.cpp */,
+				650E4D1582949D410B1A757D /* a2_fast.cpp */,
 			);
 			name = NAM;
 			path = ../../NeuralAmpModelerCore/NAM;
@@ -797,6 +811,11 @@
 				4F3E0F9B20A0C64100A9C2BE /* Frameworks */,
 				91D3DA171B023C1E008FFFBB /* Products */,
 				AA7C85EC2B43941500B5FB3A /* Recovered References */,
+				62ED4BF6933269E639B76B9B /* PlatformCommon.cpp */,
+				A28845CBB20F6794A3C48B0D /* PlatformMac.mm */,
+				9A624D848E3866FF9DD828DA /* Tone3000Client.cpp */,
+				DB51415EA20D6C18B6F9F04C /* BrowserController.cpp */,
+				C866431986F0107FB1530FF3 /* LoopbackServer.cpp */,
 			);
 			sourceTree = "<group>";
 		};
@@ -813,7 +832,6 @@
 		AA7C85EC2B43941500B5FB3A /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
-				AA8CA7752A452EF500F5BEF0 /* resample.cpp */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -859,7 +877,7 @@
 				4FBDC94D29FFF143004FF203 /* Resample.h in Headers */,
 				4FC6983A293BA4F10076EC33 /* NeuralRigAU.h in Headers */,
 				4FBDC95629FFF143004FF203 /* dsp.h in Headers */,
-				4FBDC95E29FFF143004FF203 /* model.h in Headers */,
+				4FBDC95E29FFF143004FF203 /* wavenet/model.h in Headers */,
 				4FBDC97829FFF143004FF203 /* conv1d.h in Headers */,
 				4FBDC97A29FFF143004FF203 /* ring_buffer.h in Headers */,
 				4FBDC97B29FFF143004FF203 /* film.h in Headers */,
@@ -989,7 +1007,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 91D3DA0F1B023C03008FFFBB /* Build configuration list for PBXProject "NeuralRig-iOS" */;
+			buildConfigurationList = 91D3DA0F1B023C03008FFFBB /* Build configuration list for PBXProject "App" */;
 			compatibilityVersion = "Xcode 6.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -1090,8 +1108,8 @@
 				4FBDC94E29FFF143004FF203 /* RecursiveLinearFilter.cpp in Sources */,
 				4FBDC95829FFF143004FF203 /* util.cpp in Sources */,
 				4FC69849293BA5F90076EC33 /* ITextEntryControl.cpp in Sources */,
-				4FBDC96429FFF143004FF203 /* model.cpp in Sources */,
-				4FBDC98029FFF143004FF203 /* slimmable.cpp in Sources */,
+				4FBDC96429FFF143004FF203 /* wavenet/model.cpp in Sources */,
+				4FBDC98029FFF143004FF203 /* wavenet/slimmable.cpp in Sources */,
 				4FBDC98129FFF143004FF203 /* container.cpp in Sources */,
 				4FBDC97729FFF143004FF203 /* conv1d.cpp in Sources */,
 				4FBDC97929FFF143004FF203 /* ring_buffer.cpp in Sources */,
@@ -1108,11 +1126,17 @@
 				4FBDC95329FFF143004FF203 /* ImpulseResponse.cpp in Sources */,
 				4FC69843293BA5C50076EC33 /* IPlugParameter.cpp in Sources */,
 				4FC69844293BA5C50076EC33 /* IPlugTimer.cpp in Sources */,
-				AA8CA7772A452EF500F5BEF0 /* resample.cpp in Sources */,
 				4FC69845293BA5C50076EC33 /* IPlugPaths.mm in Sources */,
 				4FBDC96329FFF143004FF203 /* activations.cpp in Sources */,
 				4FC69847293BA5F90076EC33 /* IPopupMenuControl.cpp in Sources */,
 				4FC6984E293BA61D0076EC33 /* NeuralRig.cpp in Sources */,
+				C26B42968640C6C4AA2857AC /* linear.cpp in Sources */,
+				D9E04DBBB004A4A122874E25 /* a2_fast.cpp in Sources */,
+				417D4DBDB507F76181C211E2 /* PlatformCommon.cpp in Sources */,
+				619B4DD09E5A0D8B089254D2 /* PlatformMac.mm in Sources */,
+				030A4C038B7A9103ED67E401 /* Tone3000Client.cpp in Sources */,
+				58544C73A77C738E96983213 /* BrowserController.cpp in Sources */,
+				7ECA42319D465C0F83BD93C9 /* LoopbackServer.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1513,7 +1537,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_PREFIX_HEADER = $IPLUG_PATH/IPlugOBJCPrefix.pch;
+				GCC_PREFIX_HEADER = "$IPLUG_PATH/IPlugOBJCPrefix.pch";
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(DEBUG_DEFS)",
 					"$(EXTRA_DEBUG_DEFS)",
@@ -1533,7 +1557,7 @@
 				IBSC_FLATTEN_NIBS = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = (
-					$AUv3_FRAMEWORKS,
+					"$AUv3_FRAMEWORKS",
 					"$(EXTRA_LNK_FLAGS)",
 				);
 				SWIFT_VERSION = 4.0;
@@ -1569,7 +1593,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_PREFIX_HEADER = $IPLUG_PATH/IPlugOBJCPrefix.pch;
+				GCC_PREFIX_HEADER = "$IPLUG_PATH/IPlugOBJCPrefix.pch";
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(RELEASE_DEFS)",
 					"$(EXTRA_RELEASE_DEFS)",
@@ -1588,7 +1612,7 @@
 				);
 				IBSC_FLATTEN_NIBS = NO;
 				OTHER_LDFLAGS = (
-					$AUv3_FRAMEWORKS,
+					"$AUv3_FRAMEWORKS",
 					"$(EXTRA_LNK_FLAGS)",
 				);
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -1645,7 +1669,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		91D3DA0F1B023C03008FFFBB /* Build configuration list for PBXProject "NeuralRig-iOS" */ = {
+		91D3DA0F1B023C03008FFFBB /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				91D3DA101B023C03008FFFBB /* Debug */,
