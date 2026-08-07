@@ -34,13 +34,31 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.jonjc.NeuralRig.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Must match kUrlSchemeRedirectUri in net/LoopbackServer.h and
+				     the redirect URI registered with TONE3000. -->
+				<string>neuralrig</string>
+			</array>
+		</dict>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>NeuralRig-iOS-LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>NeuralRig-iOS</string>
+	<!-- The iPlug2 template asks for armv7, which is 32-bit ARM. Apple dropped
+	     32-bit support with the A11, so requiring it makes the app ineligible
+	     for every device this could plausibly run on. -->
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UIRequiresFullScreen</key>
 	<true/>

@@ -17,7 +17,10 @@ BINARY_NAME = NeuralRig
 // HEADER AND LIBRARY SEARCH PATHS
 EXTRA_INC_PATHS =  $(IPLUG2_ROOT)/../eigen $(IGRAPHICS_INC_PATHS)
 EXTRA_LIB_PATHS = $(IGRAPHICS_LIB_PATHS)
-EXTRA_LNK_FLAGS = -framework Metal -framework MetalKit -framework Accelerate//$(IGRAPHICS_LNK_FLAGS)
+// AuthenticationServices provides ASWebAuthenticationSession, used by
+// IOSAuth.mm to present TONE3000 sign-in. Note that everything after the "//"
+// on this line is a comment, so new frameworks belong before it.
+EXTRA_LNK_FLAGS = -framework Metal -framework MetalKit -framework Accelerate -framework AuthenticationServices//$(IGRAPHICS_LNK_FLAGS)
 
 //------------------------------
 // PREPROCESSOR MACROS

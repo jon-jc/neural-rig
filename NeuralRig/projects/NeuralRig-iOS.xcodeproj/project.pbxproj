@@ -108,6 +108,7 @@
 		AA7C860E2B43A42F00B5FB3A /* ptrlist.h in Headers */ = {isa = PBXBuildFile; fileRef = AA7C86092B43A42E00B5FB3A /* ptrlist.h */; };
 		AA7C860F2B43A42F00B5FB3A /* heapbuf.h in Headers */ = {isa = PBXBuildFile; fileRef = AA7C860A2B43A42E00B5FB3A /* heapbuf.h */; };
 		AAB7BBB92CC4B8D6000B8B6E /* get_dsp.h in Headers */ = {isa = PBXBuildFile; fileRef = AAB7BBB82CC4B8D6000B8B6E /* get_dsp.h */; };
+		B89F4070A1EE4881125D0D23 /* IOSAuth.mm in Sources */ = {isa = PBXBuildFile; fileRef = C446408D8920489303D8315F /* IOSAuth.mm */; };
 		C26B42968640C6C4AA2857AC /* linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 07FB4D398B1880B355706E3A /* linear.cpp */; };
 		D9E04DBBB004A4A122874E25 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 650E4D1582949D410B1A757D /* a2_fast.cpp */; };
 /* End PBXBuildFile section */
@@ -383,6 +384,7 @@
 		AA7C86092B43A42E00B5FB3A /* ptrlist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ptrlist.h; sourceTree = "<group>"; };
 		AA7C860A2B43A42E00B5FB3A /* heapbuf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = heapbuf.h; sourceTree = "<group>"; };
 		AAB7BBB82CC4B8D6000B8B6E /* get_dsp.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = get_dsp.h; sourceTree = "<group>"; };
+		C446408D8920489303D8315F /* IOSAuth.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = IOSAuth.mm; path = ../IOSAuth.mm; sourceTree = "<group>"; };
 		C866431986F0107FB1530FF3 /* LoopbackServer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LoopbackServer.cpp; path = ../net/LoopbackServer.cpp; sourceTree = "<group>"; };
 		DB51415EA20D6C18B6F9F04C /* BrowserController.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = BrowserController.cpp; path = ../net/BrowserController.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -816,6 +818,7 @@
 				9A624D848E3866FF9DD828DA /* Tone3000Client.cpp */,
 				DB51415EA20D6C18B6F9F04C /* BrowserController.cpp */,
 				C866431986F0107FB1530FF3 /* LoopbackServer.cpp */,
+				C446408D8920489303D8315F /* IOSAuth.mm */,
 			);
 			sourceTree = "<group>";
 		};
@@ -1149,6 +1152,7 @@
 				4FDF6D7B2267CE540007B686 /* AppDelegate.m in Sources */,
 				4FDF6D772267CE540007B686 /* AppViewController.mm in Sources */,
 				4FDF6D792267CE540007B686 /* main.m in Sources */,
+				B89F4070A1EE4881125D0D23 /* IOSAuth.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1345,6 +1349,10 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"-framework",
+					AuthenticationServices,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.NeuralRig;
 				PRODUCT_NAME = NeuralRig;
 				SDKROOT = iphoneos;
@@ -1395,6 +1403,10 @@
 					"@executable_path/Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_LDFLAGS = (
+					"-framework",
+					AuthenticationServices,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.NeuralRig;
 				PRODUCT_NAME = NeuralRig;
 				SDKROOT = iphoneos;

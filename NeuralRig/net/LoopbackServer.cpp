@@ -1,7 +1,9 @@
 #include "LoopbackServer.h"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -243,5 +245,74 @@ void LoopbackServer::Stop()
 
   mPort = 0;
 }
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+
+namespace
+{
+// One sign-in can be in flight at a time, so a single rendezvous is enough.
+// Deliver is called from the app's main thread while a worker waits.
+std::mutex gRedirectMutex;
+std::condition_variable gRedirectSignal;
+std::map<std::string, std::string> gRedirectParameters;
+bool gRedirectArrived = false;
+bool gRedirectCancelled = false;
+} // namespace
+
+std::string UrlSchemeRedirect::Start()
+{
+  {
+    std::lock_guard<std::mutex> lock(gRedirectMutex);
+    gRedirectParameters.clear();
+    gRedirectArrived = false;
+    gRedirectCancelled = false;
+  }
+
+  mRunning = true;
+
+  return kUrlSchemeRedirectUri;
+}
+
+std::map<std::string, std::string> UrlSchemeRedirect::WaitForRedirect(int timeoutMs)
+{
+  std::unique_lock<std::mutex> lock(gRedirectMutex);
+
+  // Predicated wait, so a callback that arrives before we get here is not lost
+  // and a spurious wake does not end the wait early.
+  gRedirectSignal.wait_for(lock, std::chrono::milliseconds(timeoutMs),
+                           [] { return gRedirectArrived || gRedirectCancelled; });
+
+  if (!gRedirectArrived)
+    return {};
+
+  return gRedirectParameters;
+}
+
+void UrlSchemeRedirect::Stop()
+{
+  {
+    std::lock_guard<std::mutex> lock(gRedirectMutex);
+    gRedirectCancelled = true;
+  }
+
+  gRedirectSignal.notify_all();
+  mRunning = false;
+}
+
+void UrlSchemeRedirect::Deliver(const std::string& callbackUrl)
+{
+  {
+    std::lock_guard<std::mutex> lock(gRedirectMutex);
+
+    // The authorization code and state arrive as the query of the deep link,
+    // exactly as they would on the loopback path, so the same parser applies.
+    gRedirectParameters = ParseQueryParameters(callbackUrl);
+    gRedirectArrived = true;
+  }
+
+  gRedirectSignal.notify_all();
+}
+
+#endif // __APPLE__ && TARGET_OS_IPHONE
 
 } // namespace nr::net

@@ -545,7 +545,7 @@ std::string BrowserController::BuildSelectToneUrl(const PkcePair& pkce, const st
   return mClient.BuildSelectToneUrl(pkce, redirectUri);
 }
 
-void BrowserController::AwaitToneSelection(LoopbackServer& loopback,
+void BrowserController::AwaitToneSelection(RedirectListener& loopback,
                                            const PkcePair& pkce,
                                            const std::string& redirectUri,
                                            int timeoutMs,
@@ -562,7 +562,7 @@ void BrowserController::AwaitToneSelection(LoopbackServer& loopback,
   });
 }
 
-void BrowserController::HandleOneSelection(LoopbackServer& loopback,
+void BrowserController::HandleOneSelection(RedirectListener& loopback,
                                            const PkcePair& pkce,
                                            const std::string& redirectUri,
                                            int timeoutMs,
