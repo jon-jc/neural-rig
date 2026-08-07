@@ -2,9 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Shared container for the capture cache. An app extension gets its own
+	     sandbox, so without this a capture downloaded in the app would be
+	     invisible to the AUv3 plugin. Must match the identifier passed to
+	     containerURLForSecurityApplicationGroupIdentifier in net/PlatformMac.mm,
+	     and must be registered on the Apple Developer account and enabled for
+	     both the app and the extension. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.io.github.iplug2</string>
+		<string>group.com.jonjc.NeuralRig</string>
+	</array>
+
+	<!-- Shared keychain, so the OAuth refresh token the app obtains is readable
+	     by the extension. Only the app can present sign-in, so without this the
+	     plugin could never become authorised.
+
+	     Order matters. net/PlatformMac.mm deliberately leaves kSecAttrAccessGroup
+	     unset, which files items under the first group listed here -- that keeps
+	     the team ID out of the source, since only the entitlement can expand
+	     $(AppIdentifierPrefix). -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.jonjc.NeuralRig</string>
 	</array>
 </dict>
 </plist>

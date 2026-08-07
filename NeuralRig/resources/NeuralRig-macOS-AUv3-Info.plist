@@ -9,7 +9,7 @@
 	<key>CFBundleGetInfoString</key>
 	<string>NeuralRig v0.7.15 Copyright 2022 Steven Atkinson</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.StevenAtkinson.app.NeuralRig.AUv3</string>
+	<string>com.jonjc.app.NeuralRig.AUv3</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -27,7 +27,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>AudioComponentBundle</key>
-			<string>com.StevenAtkinson.app.NeuralRig.AUv3Framework</string>
+			<string>com.jonjc.app.NeuralRig.AUv3Framework</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
