@@ -1349,10 +1349,6 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"-framework",
-					AuthenticationServices,
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.NeuralRig;
 				PRODUCT_NAME = NeuralRig;
 				SDKROOT = iphoneos;
@@ -1403,10 +1399,6 @@
 					"@executable_path/Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = (
-					"-framework",
-					AuthenticationServices,
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.NeuralRig;
 				PRODUCT_NAME = NeuralRig;
 				SDKROOT = iphoneos;
